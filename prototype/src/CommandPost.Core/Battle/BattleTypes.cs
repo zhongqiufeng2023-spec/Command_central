@@ -165,15 +165,33 @@ public static class BattlePath
             (px, py) = came[px, py];
         }
         path.Reverse();
-        // 去共线航点,末点替换为精确目的地
-        for (int i = path.Count - 2; i >= 1; i--)
-        {
-            var a = (path[i] - path[i - 1]).Normalized;
-            var b = (path[i + 1] - path[i]).Normalized;
-            if (a.Dot(b) > 0.999f) path.RemoveAt(i);
-        }
         if (path.Count > 0) path[^1] = to; else path.Add(to);
-        return path;
+
+        // 拉直:能直走就直走(只避不可通行)。消除 8 向 A* 的「先横后斜」折线——
+        // 否则塘骑/部队会先沿水平线走一长段再拐弯,看着像只会横着走。
+        var smoothed = new List<Vec2F>();
+        var cur = from;
+        int idx = 0;
+        while (idx < path.Count)
+        {
+            int far = idx;
+            for (int j = path.Count - 1; j > idx; j--)
+                if (ClearLine(map, cur, path[j])) { far = j; break; }
+            smoothed.Add(path[far]);
+            cur = path[far];
+            idx = far + 1;
+        }
+        return smoothed;
+    }
+
+    /// <summary>两点间直线是否全程可通行(每 4m 采样;河宽 32m,不会漏检)。</summary>
+    private static bool ClearLine(BattleMap map, Vec2F a, Vec2F b)
+    {
+        float len = a.DistanceTo(b);
+        int steps = Math.Max(1, (int)(len / 4f));
+        for (int i = 1; i <= steps; i++)
+            if (!BattleMap.Passable(map.At(Vec2F.Lerp(a, b, (float)i / steps)))) return false;
+        return true;
     }
 }
 

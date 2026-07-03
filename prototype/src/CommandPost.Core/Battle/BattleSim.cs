@@ -8,6 +8,7 @@ namespace CommandPost.Core;
 public sealed class Arrow
 {
     public Vec2F Pos, Vel;
+    public Vec2F Origin;         // 射出点(被射中者由此知道威胁来向)
     public float TravelLeft;
     public float RawDamage;      // 未计克制/护甲
     public UnitType Shooter;
@@ -28,7 +29,8 @@ public sealed class Rider
     public List<Vec2F> Path = new();
     public int TargetUnitId = -1;
     public Vec2F DestPoint;
-    public Vec2F OrderDest; public bool OrderRun;
+    public Vec2F OrderDest; public bool OrderRun; public bool HasMove;
+    public BStance? OrderStance;             // 携带的姿态令(可与移动令同乘一骑)
     public float DwellLeft;
     public Dictionary<int, EnemySighting> Sightings = new();
     public OwnStatus? ReportOwn;                  // 携带的我部近况
@@ -126,10 +128,24 @@ public sealed class BattleSim
         dest = Map.NearestPassable(Map.Clamp(dest));
         var start = Sandbox.Own.TryGetValue(unitId, out var mk) ? mk.Pos : u.Center;
         var r = NewRider(RiderKind.Order, BattlePath.Find(Map, HqPos, start));
-        r.TargetUnitId = unitId; r.OrderDest = dest; r.OrderRun = run;
+        r.TargetUnitId = unitId; r.OrderDest = dest; r.OrderRun = run; r.HasMove = true;
         r.DescCn = $"令骑→{u.Name}";
         Feed($"令骑驰出:令 {u.Name} {(run ? "疾进" : "进")}至 ({(int)dest.X},{(int)dest.Y})");
     }
+
+    /// <summary>下姿态令(进攻/据守/等待):同样由令骑送达,部队此后按姿态自主行事。</summary>
+    public void IssueStance(int unitId, BStance stance)
+    {
+        if (ById(unitId) is not { } u || u.Side != Side.Friend || u.AliveCount == 0) return;
+        var start = Sandbox.Own.TryGetValue(unitId, out var mk) ? mk.Pos : u.Center;
+        var r = NewRider(RiderKind.Order, BattlePath.Find(Map, HqPos, start));
+        r.TargetUnitId = unitId; r.OrderStance = stance;
+        r.DescCn = $"令骑→{u.Name}";
+        Feed($"令骑驰出:令 {u.Name} 转「{StanceCnOf(stance)}」");
+    }
+
+    public static string StanceCnOf(BStance s) => s switch
+    { BStance.Attack => "进攻", BStance.Standby => "等待", _ => "据守" };
 
     /// <summary>派塘骑侦察某处(到点驻观 3 秒,回来把沿途所见并入沙盘)。</summary>
     public void DispatchScout(Vec2F dest)
@@ -192,6 +208,7 @@ public sealed class BattleSim
         Time += Dt;
         UpdateEnemyKnowledge();
         UpdateEnemyAi();
+        UpdateStances();     // 我方各部按姿态自主行事(进攻扑敌/等待避战)
         UpdateRiders();
         AutoReports();
         UpdateUnits();
@@ -250,6 +267,49 @@ public sealed class BattleSim
         }
     }
 
+    /// <summary>我方各部的姿态自主行为(每 2s 想一次)——没有命令也不再站着挨打。</summary>
+    private void UpdateStances()
+    {
+        foreach (var u in Units.Where(x => x.Side == Side.Friend && !x.AiControlled && x.Controllable))
+        {
+            u.ThinkClock -= Dt;
+            if (u.ThinkClock > 0) continue;
+            u.ThinkClock = 2f;
+            bool threatened = Time - u.LastThreatT < 8f;
+
+            switch (u.Stance)
+            {
+                case BStance.Attack:
+                {
+                    // 视界内寻敌(林中难见);看不见但刚挨打 → 朝威胁来向扑
+                    BattleUnit? tgt = null; float bd = float.MaxValue;
+                    foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AliveCount > 0))
+                    {
+                        float vis = 130f * BattleMap.ConcealMult(Map.At(e.Center));
+                        float d = e.Center.DistanceTo(u.Center);
+                        if (d <= vis && d < bd) { bd = d; tgt = e; }
+                    }
+                    if (tgt != null && bd > 10f)
+                        u.SetOrderDirect(tgt.Center, run: BArms.IsCav(u.Type) || bd < 60f, Map);
+                    else if (tgt == null && threatened)
+                        u.SetOrderDirect(u.LastThreatPos, run: true, Map);
+                    break;
+                }
+                case BStance.Standby:
+                {
+                    // 避战自保:敌近或挨打 → 反向拉开 70m
+                    Vec2F? threat = threatened ? u.LastThreatPos : null;
+                    var near = NearestUnit(u.Center, Side.Enemy);
+                    if (near != null && near.Center.DistanceTo(u.Center) < 55f) threat = near.Center;
+                    if (threat is { } tp)
+                        u.SetOrderDirect(Map.Clamp(u.Center + (u.Center - tp).Normalized * 70f), run: true, Map);
+                    break;
+                }
+                // Hold(据守):钉在原地——近战自动还手,弩手自动齐射
+            }
+        }
+    }
+
     // ====================================================================
     //  令骑
     // ====================================================================
@@ -294,7 +354,8 @@ public sealed class BattleSim
                 switch (r.Kind)
                 {
                     case RiderKind.Order when ById(r.TargetUnitId) is { } u && u.AliveCount > 0:
-                        u.SetOrderDirect(r.OrderDest, r.OrderRun, Map);
+                        if (r.OrderStance is { } st) u.Stance = st;
+                        if (r.HasMove) u.SetOrderDirect(r.OrderDest, r.OrderRun, Map);
                         r.ReportOwn = Snapshot(u);
                         break;
                     case RiderKind.Query when ById(r.TargetUnitId) is { } q && q.AliveCount > 0:
@@ -344,7 +405,13 @@ public sealed class BattleSim
         }
     }
 
-    private OwnStatus Snapshot(BattleUnit u) => new(u.Id, u.Center, u.AliveCount, u.StateCn, Time);
+    private OwnStatus Snapshot(BattleUnit u) => new(u.Id, u.Center, u.AliveCount, $"{u.StanceCn}·{u.StateCn}", Time);
+
+    // —— 瞭望台:帅帐望楼的实时所见(低保真、只在范围内、不留记忆)——
+    public float WatchtowerRange { get; set; } = 180f;
+    public IEnumerable<BattleUnit> WatchtowerVisible() =>
+        Units.Where(u => u.AliveCount > 0 &&
+            u.Center.DistanceTo(HqPos) <= WatchtowerRange * BattleMap.ConcealMult(Map.At(u.Center)));
 
     /// <summary>骑手回帐:所携情报并入沙盘(信息年龄 = 采集时刻,不是送达时刻)。</summary>
     private void MergeRiderIntel(Rider r)
@@ -474,7 +541,11 @@ public sealed class BattleSim
                 var sum = new Vec2F(0, 0);
                 foreach (var s in u.Soldiers) sum += s.Pos;
                 u.Center = sum * (1f / u.AliveCount);
-                if (nearestFoe != null) u.Facing = (nearestFoe.Center - u.Center).Normalized;
+                if (nearestFoe != null)
+                {
+                    u.Facing = (nearestFoe.Center - u.Center).Normalized;
+                    u.LastThreatPos = nearestFoe.Center; u.LastThreatT = Time;   // 接刃即知威胁所在
+                }
             }
             else u.SpeedNow = 0;
 
@@ -691,7 +762,7 @@ public sealed class BattleSim
                                                          ((float)_rng.NextDouble() * 2 - 1) * scatter);
                         Arrows.Add(new Arrow
                         {
-                            Pos = s.Pos, Vel = (aim - s.Pos).Normalized * 38f,
+                            Pos = s.Pos, Origin = s.Pos, Vel = (aim - s.Pos).Normalized * 38f,
                             TravelLeft = aim.DistanceTo(s.Pos),
                             RawDamage = BArms.RangedDamage(u.Type) * (0.8f + (float)_rng.NextDouble() * 0.4f),
                             Shooter = u.Type, Side = u.Side
@@ -744,6 +815,7 @@ public sealed class BattleSim
                 var vu = _byId[victim.UnitId];
                 float dmg = a.RawDamage * (float)Unit.TypeMatchup(a.Shooter, vu.Type) / BArms.ArmorOf(vu.Type);
                 victim.Hp -= dmg;
+                if (vu.Side != a.Side) { vu.LastThreatPos = a.Origin; vu.LastThreatT = Time; }   // 挨箭知来向
                 if (victim.Hp <= 0)
                 {
                     vu.RecentLoss += 1f;

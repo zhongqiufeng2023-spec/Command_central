@@ -84,6 +84,27 @@ public class BattleSimTests
     }
 
     [Fact]
+    public void AttackStance_ChargesNearbyEnemy_WithoutPlayerOrder()
+    {
+        var sim = Sim();
+        var a = sim.AddUnit(Side.Friend, UnitType.Spear, "枪", new Commander("甲", Personality.Steady), new Vec2F(80, 80), 60);
+        a.Stance = BStance.Attack;                                     // 姿态=进攻:视界内自主接敌
+        var e = sim.AddUnit(Side.Enemy, UnitType.TribalFoot, "众", new Commander("乙", Personality.Steady), new Vec2F(135, 80), 60);
+        Run(sim, 45f);
+        Assert.True(a.Kills > 0 || e.AliveCount < 60, $"进攻姿态应自主接敌:斩获{a.Kills} 敌存{e.AliveCount}");
+    }
+
+    [Fact]
+    public void HoldStance_StaysPut_UnderNoContact()
+    {
+        var sim = Sim();
+        var a = sim.AddUnit(Side.Friend, UnitType.Shield, "盾", new Commander("甲", Personality.Steady), new Vec2F(80, 80), 60);
+        sim.AddUnit(Side.Enemy, UnitType.TribalFoot, "众", new Commander("乙", Personality.Steady), new Vec2F(400, 80), 60);
+        Run(sim, 20f);                                                 // 默认据守:远敌不动如山
+        Assert.True(a.Center.DistanceTo(new Vec2F(80, 80)) < 10f);
+    }
+
+    [Fact]
     public void AutoReport_UpdatesSandbox_WithAgedInfo()
     {
         var sim = Sim(40, 10);

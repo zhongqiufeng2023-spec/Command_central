@@ -105,6 +105,9 @@ public partial class BattleRoot : Node2D
 				if (_selectedId >= 0 && !_sim.Over)
 				{ _sim.RequestStatus(_selectedId); _banner = "令骑已出:探问该部近况……"; _bannerAge = 0; }
 				break;
+			case Key.Key1: SendStance(BStance.Attack); break;
+			case Key.Key2: SendStance(BStance.Hold); break;
+			case Key.Key3: SendStance(BStance.Standby); break;
 			case Key.Home: _cam = new Vector2(_sim.Map.WorldW / 2f, _sim.Map.WorldH / 2f); _zoom = 0.9f; break;
 			case Key.Escape: _selectedId = -1; break;
 		}
@@ -149,6 +152,14 @@ public partial class BattleRoot : Node2D
 				_sim.DispatchScout(world); break;                              // 塘骑侦察
 		}
 		QueueRedraw();
+	}
+
+	private void SendStance(BStance st)
+	{
+		if (_selectedId < 0 || _sim.Over) return;
+		_sim.IssueStance(_selectedId, st);
+		_banner = $"令骑已出:令该部转「{BattleSim.StanceCnOf(st)}」";
+		_bannerAge = 0;
 	}
 
 	private void ZoomAt(Vector2 screen, float factor)
@@ -255,6 +266,14 @@ public partial class BattleRoot : Node2D
 	{
 		float now = _sim.Time;
 
+		// 瞭望台:帅帐望楼的实时视界(圈内所见即真——低保真但零延迟)
+		var live = _sim.WatchtowerVisible().ToList();
+		var liveIds = new HashSet<int>(live.Select(u => u.Id));
+		DrawArc(ToScreen(_sim.HqPos), _sim.WatchtowerRange * _zoom, 0, Mathf.Tau, 64,
+			new Color(0.85f, 0.75f, 0.45f, 0.30f), 1.5f, true);
+		DrawText(ToScreen(_sim.HqPos) + new Vector2(0, _sim.WatchtowerRange * _zoom + 12), "瞭望所及", 10,
+			new Color(0.85f, 0.75f, 0.45f, 0.5f), center: true);
+
 		// 信息旗
 		foreach (var f in _sim.Sandbox.Flags)
 		{
@@ -264,9 +283,10 @@ public partial class BattleRoot : Node2D
 			DrawText(p + new Vector2(0, 12), f.Label, 11, new Color("e6c25c"), center: true);
 		}
 
-		// 敌情旧影(菱形;越旧越淡)
+		// 敌情旧影(菱形;越旧越淡)——望楼正看着的不画旧影,画下面的实见
 		foreach (var em in _sim.Sandbox.Enemy.Values)
 		{
+			if (liveIds.Contains(em.UnitId)) continue;
 			var u = _sim.ById(em.UnitId);
 			float age = now - em.T;
 			float a = Mathf.Clamp(0.95f - age / 120f * 0.6f, 0.3f, 0.95f);
@@ -277,19 +297,31 @@ public partial class BattleRoot : Node2D
 			DrawText(p + new Vector2(0, 14), $"{(int)age}s前", 10, new Color(0.7f, 0.7f, 0.65f, a), center: true);
 		}
 
-		// 己方所报位置(圆token;信息也会旧!)
+		// 己方所报位置(圆token;信息也会旧!)——望楼看得见的画实时位置
 		foreach (var mk in _sim.Sandbox.Own.Values)
 		{
 			var u = _sim.ById(mk.UnitId);
 			if (u is null) continue;
+			bool watched = liveIds.Contains(mk.UnitId) && u.AliveCount > 0;
 			float age = now - mk.T;
-			var p = ToScreen(mk.Pos);
+			var p = ToScreen(watched ? u.Center : mk.Pos);
 			bool sel = mk.UnitId == _selectedId;
 			var col = u.AliveCount == 0 ? new Color(0.4f, 0.3f, 0.3f) : new Color(0.70f, 0.24f, 0.18f);
 			DrawCircle(p, 10f, col);
 			DrawArc(p, 10f, 0, Mathf.Tau, 24, new Color("d9b34a"), sel ? 3f : 1.5f, true);
-			DrawText(p + new Vector2(0, -18), $"{u.Name} 约{mk.Count}", 12, new Color("ffe0b0"), center: true);
-			DrawText(p + new Vector2(0, 14), $"{mk.StateCn}·{(int)age}s前", 10, new Color("c8bfa8"), center: true);
+			DrawText(p + new Vector2(0, -18), $"{u.Name} 约{(watched ? u.AliveCount : mk.Count)}", 12, new Color("ffe0b0"), center: true);
+			DrawText(p + new Vector2(0, 14), watched ? $"{u.StanceCn}·{u.StateCn}·望见" : $"{mk.StateCn}·{(int)age}s前", 10,
+				watched ? new Color("e8d9a0") : new Color("c8bfa8"), center: true);
+		}
+
+		// 望楼实见的敌部(实时亮菱形,只报约数)
+		foreach (var u in live.Where(x => x.Side == Side.Enemy))
+		{
+			var p = ToScreen(u.Center);
+			int est = System.Math.Max(10, u.AliveCount / 10 * 10);
+			DrawDiamond(p, 11f, new Color(0.50f, 0.68f, 0.90f, 0.95f), filled: false);
+			DrawText(p + new Vector2(0, -18), $"虏·{BattleSim.ArmCn(u.Type)} 约{est}", 12, new Color("a8c8ec"), center: true);
+			DrawText(p + new Vector2(0, 14), "望见·实时", 10, new Color("d0c8a0"), center: true);
 		}
 
 		// 在途骑手(估计位置:按出发时刻+计划路线推算——被截杀了你也不知道)
@@ -339,7 +371,7 @@ public partial class BattleRoot : Node2D
 		string mode = _realView ? "真实战场(对照,Tab切回)" : "沙盘·帅帐所知";
 		DrawText(new Vector2(16, 22), $"黑松岭之战 · {mode}   {BattleSim.FormatT(_sim.Time)} {clock}", 15, new Color("e8e0d0"));
 		DrawText(new Vector2(16, 42),
-			"空格暂停 · ±调速 · N单步 · Tab视图 · 滚轮缩放 · WASD平移 · Home复位 | 左键选部 · 右键下令(Shift疾进) · 中键塘骑 · Ctrl+左键插旗 · R探问",
+			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 R探问 | 中键塘骑 Ctrl+左键插旗",
 			11, new Color("9aa0a8"));
 
 		if (!_realView && _selectedId >= 0 && _sim.Sandbox.Own.TryGetValue(_selectedId, out var mk))

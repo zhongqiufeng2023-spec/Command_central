@@ -8,6 +8,10 @@ public enum BUnitState { Steady, Engaged, Wavering, Routing, Shattered, Destroye
 
 public enum BOrderKind { Hold, Move }
 
+/// <summary>部队姿态(玩家经令骑设定):没有命令时部队按姿态自主行事——
+/// 进攻=视界内自主接敌/挨打就扑;据守=钉在原地打还手;等待=避战自保,敌近则后撤。</summary>
+public enum BStance { Attack, Hold, Standby }
+
 /// <summary>一名士兵:自己的位置与血量。部队兵力 = 存活士兵之和。</summary>
 public sealed class Soldier
 {
@@ -57,6 +61,12 @@ public sealed class BattleUnit
     public bool ReportedEngaged, ReportedRouting;
     public int VolleyTargetId = -1;  // 远程齐射目标部队
 
+    /// <summary>姿态(玩家部队按此自主行事;敌 AI 走自己的脑子)。</summary>
+    public BStance Stance = BStance.Hold;
+    /// <summary>最近一次受威胁(挨箭/接刃)的方位与时刻——姿态反应的依据。</summary>
+    public Vec2F LastThreatPos;
+    public float LastThreatT = -999f;
+
     public bool Controllable => State is BUnitState.Steady or BUnitState.Engaged or BUnitState.Wavering && AliveCount > 0;
 
     /// <summary>直接下令(令骑送达 / 敌 AI / 测试用)。玩家指令必须经令骑,不可直调。</summary>
@@ -92,5 +102,10 @@ public sealed class BattleUnit
         BUnitState.Shattered => "溃散",
         BUnitState.Destroyed => "覆没",
         _ => Path.Count > 0 ? (Running ? "疾进" : "行进") : "待命"
+    };
+
+    public string StanceCn => Stance switch
+    {
+        BStance.Attack => "进攻", BStance.Standby => "等待", _ => "据守"
     };
 }
