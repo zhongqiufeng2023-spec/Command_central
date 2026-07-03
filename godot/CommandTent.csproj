@@ -1,0 +1,12 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- 零重写复用:直接引用引擎无关内核(纯 .NET 类库)。这一条 = 里程碑二的核心验证。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\prototype\src\CommandPost.Core\CommandPost.Core.csproj" />
+  </ItemGroup>
+</Project>

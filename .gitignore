@@ -1,0 +1,22 @@
+# ---- .NET ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userprefs
+.vs/
+
+# ---- Godot 4 (.NET/Mono) ----
+# 引擎生成的导入缓存 / 构建中间产物 / mono 临时程序集
+.godot/
+*.translation
+export_presets.cfg
+mono_crash.*.json
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.tmp
+*~
