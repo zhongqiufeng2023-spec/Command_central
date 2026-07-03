@@ -25,6 +25,26 @@ public sealed class Simulation
     /// <summary>当前战役的中军任务(可空);每 tick 末评估(§任务制胜负,PRD §8.6 政治的输入)。</summary>
     public Mission? Mission { get; set; }
 
+    /// <summary>给玩家的醒目提示流(中军令/斥候归来/使者未归…);Pause=true 前端自动暂停。</summary>
+    public List<Alert> Alerts { get; } = new();
+
+    /// <summary>剧本触发器:到 tick 直接给某单位下真相层命令(袭击队等,绕过传令/解读)。</summary>
+    public List<(int Tick, int UnitId, Intent Intent)> ScheduledOrders { get; } = new();
+
+    /// <summary>战后政治评语(战役结束那一 tick 生成一次)。</summary>
+    public Appraisal? Appraisal { get; private set; }
+
+    /// <summary>战役是否已结束:任一方覆没,或到达任务的战役窗口(到时敌自退,按目标结算)。</summary>
+    public bool BattleOver => Status != GameStatus.Ongoing || (Mission is { } m && Truth.Tick >= m.EndTick);
+
+    /// <summary>本路(玩家直辖)开局总兵力/当前总兵力——政治评价的「代价」输入。</summary>
+    public double PlayerStrengthAtStart { get; }
+    public double PlayerStrengthNow => Truth.Units.Where(u => u.Side == Side.Friend && u.PlayerLed).Sum(u => u.Strength);
+
+    /// <summary>帅帐↔本路 的上报链路延迟(帅帐在后方)。</summary>
+    private const int HqLinkDelay = 12;
+    private readonly List<(int ArriveTick, int IntelCount, int SentTick)> _hqReports = new();
+
     /// <summary>玩家可见的事件流(情报送达、传令、未归提示…)。</summary>
     public List<string> Log { get; } = new();
     /// <summary>真相事件流(副将偏离、丢失等)——仅复盘可见,玩家战中看不到。</summary>
@@ -48,6 +68,7 @@ public sealed class Simulation
             var d = truth.HqOf(u.Side.Opponent()) - u.Pos;                  // 初始面向敌方大本营
             if (d.X != 0 || d.Y != 0) u.Facing = SignDir(d);
         }
+        PlayerStrengthAtStart = truth.Units.Where(u => u.Side == Side.Friend && u.PlayerLed).Sum(u => u.Strength);
         RecordFrame(); // t0 初始帧
     }
 
@@ -130,6 +151,15 @@ public sealed class Simulation
         Log.Add($"t{Truth.Tick} 【{kind.Cn()}】向{who}发出「{code.Cn()}」号令");
     }
 
+    /// <summary>遣使赴帅帐,呈报当前所知敌情(HqLinkDelay 后送达;送达才算「回报」目标)。
+    /// 这是你操纵帅帐认知的杠杆——报什么、何时报,决定主帅怎么看你。</summary>
+    public void ReportToHq()
+    {
+        int n = Beliefs[Side.Friend].KnownOf(Side.Enemy).Count();
+        _hqReports.Add((Truth.Tick + HqLinkDelay, n, Truth.Tick));
+        Log.Add($"t{Truth.Tick} 【上报】遣使赴帅帐呈报(敌情 {n} 条,在途)");
+    }
+
     // ====================================================================
     //  主循环
     // ====================================================================
@@ -137,6 +167,8 @@ public sealed class Simulation
     public void AdvanceTick()
     {
         Truth.Tick++;
+        ApplyScheduledOrders();  // 剧本触发(袭击队等)
+        ProcessHqLink();         // 帅帐链路:中军令送达 / 上报送达
         ResolveSignals();
         MoveUnits();
         ResolveRanged();     // 弓/骑射:隔空放箭(先于近战软化敌军)
@@ -150,6 +182,51 @@ public sealed class Simulation
         MoveMessengers();
         RecordFrame();
         Mission?.Evaluate(this);
+
+        if (BattleOver && Appraisal is null && Mission is not null)
+        {
+            Appraisal = PoliticalJudge.Judge(this);
+            Log.Add($"t{Truth.Tick} 【帅帐】战役毕,评语至:信任 {Appraisal.Trust}——{Appraisal.VerdictCn}");
+            Alerts.Add(new Alert(Truth.Tick, "战役毕——帅帐评语已到", true));
+        }
+    }
+
+    private void ApplyScheduledOrders()
+    {
+        for (int i = ScheduledOrders.Count - 1; i >= 0; i--)
+        {
+            var (tick, uid, intent) = ScheduledOrders[i];
+            if (Truth.Tick < tick) continue;
+            if (Truth.UnitById(uid) is { Alive: true } u) u.Order = intent;
+            ScheduledOrders.RemoveAt(i);
+        }
+    }
+
+    /// <summary>帅帐链路:分阶段中军令按时送达(激活目标);玩家上报延迟送达(置位回报目标)。</summary>
+    private void ProcessHqLink()
+    {
+        if (Mission is not { } m) return;
+
+        foreach (var o in m.Orders.Where(o => !o.Delivered && Truth.Tick >= o.ArriveTick))
+        {
+            o.Delivered = true;
+            foreach (var oid in o.ActivatesObjectives)
+                if (m[oid] is { } obj) obj.Active = true;
+            if (o.ActivatesObjectives.Contains("C")) m.AidOrderDeliveredTick = Truth.Tick;
+            Log.Add($"t{Truth.Tick} 【中军令·{o.TitleCn}】{o.TextCn}");
+            Alerts.Add(new Alert(Truth.Tick, $"中军令·{o.TitleCn}:{o.TextCn}", true));
+        }
+
+        for (int i = _hqReports.Count - 1; i >= 0; i--)
+        {
+            var (arrive, n, sent) = _hqReports[i];
+            if (Truth.Tick < arrive) continue;
+            _hqReports.RemoveAt(i);
+            if (n > 0 && m["B"] is { Active: true } b && b.State != ObjectiveState.Done) b.State = ObjectiveState.Done;
+            if (m.AidOrderDeliveredTick is int adt && sent >= adt && m["D"] is { Active: true } d) d.State = ObjectiveState.Done;
+            Log.Add($"t{Truth.Tick} 【帅帐】收悉尔部所报({n} 条敌情)");
+            Alerts.Add(new Alert(Truth.Tick, $"帅帐收悉尔部上报({n} 条敌情)", false));
+        }
     }
 
     private void MoveUnits()
@@ -434,7 +511,10 @@ public sealed class Simulation
         TruthLog.Add($"t{Truth.Tick} 传令兵#{m.Id} 在 {m.Pos} 被拦截/阵亡(载荷丢失)");
         // 丢失 = 纯沉默;仅在低难度对玩家主动派出者给「未归」提示。
         if (m.Side == Side.Friend && m.PlayerDispatched && Difficulty.NotifyLostActiveMessenger)
+        {
             Log.Add($"t{Truth.Tick} ⚠ 派往 #{m.HomingUnitId} 的传令兵迟迟未归……");
+            Alerts.Add(new Alert(Truth.Tick, $"派往 #{m.HomingUnitId} 的传令兵迟迟未归……", true));
+        }
     }
 
     private void Deliver(Messenger m)
@@ -442,13 +522,17 @@ public sealed class Simulation
         if (m.Reports.Count > 0)
         {
             var belief = Beliefs[m.Side];
+            int freshEnemy = 0;
             foreach (var r in m.Reports)
             {
                 bool newer = !belief.Known.TryGetValue(r.About.UnitId, out var g) || r.ObservedTick > g.ObservedTick;
                 belief.Integrate(r);
+                if (newer && r.About.Side == Side.Enemy) freshEnemy++;
                 if (m.Side == Side.Friend && newer) Log.Add(FormatReport(r)); // 只报真正更新的情报,免刷屏
             }
-            FlushSightingsToBelief(m.Sightings, m.Side);                       // 传令兵途中所见 → 中军认知
+            freshEnemy += FlushSightingsToBelief(m.Sightings, m.Side);         // 传令兵途中所见 → 中军认知
+            if (m.Side == Side.Friend && freshEnemy > 0)
+                Alerts.Add(new Alert(Truth.Tick, $"新敌情战报送达({freshEnemy} 条)", false));
         }
         else if (m.Command is CommandPayload c)
         {
@@ -563,7 +647,7 @@ public sealed class Simulation
         var belief = Beliefs[Side.Enemy];
         var ghosts = belief.KnownOf(Side.Friend).ToList();
 
-        foreach (var e in Truth.LivingOf(Side.Enemy).ToList())
+        foreach (var e in Truth.LivingOf(Side.Enemy).Where(u => !u.AiExempt).ToList())
         {
             var (atkW, riskW, holdW) = Weights(e.Commander.Personality);
             Intent best = Intent.Hold();
@@ -796,9 +880,12 @@ public sealed class Simulation
         }
         else
         {
-            FlushSightingsToBelief(s.Sightings, s.Side);                                 // 中军斥候 → 直接更新认知世界
+            int fresh = FlushSightingsToBelief(s.Sightings, s.Side);                     // 中军斥候 → 直接更新认知世界
             if (s.Side == Side.Friend)
+            {
                 Log.Add($"t{Truth.Tick} 中军斥候归来,敌情 {s.Sightings.Count} 条");
+                if (fresh > 0) Alerts.Add(new Alert(Truth.Tick, $"斥候归来:侦获敌情 {fresh} 条", true));
+            }
         }
     }
 
@@ -820,9 +907,12 @@ public sealed class Simulation
         }
     }
 
-    private void FlushSightingsToBelief(Dictionary<int, GhostUnit> sightings, Side side)
+    private int FlushSightingsToBelief(Dictionary<int, GhostUnit> sightings, Side side)
     {
-        foreach (var g in sightings.Values) MergeGhost(Beliefs[side], JudgeSighting(g), side == Side.Friend);
+        int fresh = 0;
+        foreach (var g in sightings.Values)
+            if (MergeGhost(Beliefs[side], JudgeSighting(g), side == Side.Friend)) fresh++;
+        return fresh;
     }
 
     /// <summary>斥候/传令兵把「亲眼所见的真相」判读成一份估计:越远越糊 —— 兵力报个约数(带误差)、
@@ -849,10 +939,10 @@ public sealed class Simulation
         };
     }
 
-    private void MergeGhost(BeliefWorld b, GhostUnit g, bool friendLog)
+    private bool MergeGhost(BeliefWorld b, GhostUnit g, bool friendLog)
     {
         bool newer = !b.Known.TryGetValue(g.UnitId, out var ex) || g.ObservedTick > ex.ObservedTick;
-        if (!newer) return;
+        if (!newer) return false;
         b.Known[g.UnitId] = new GhostUnit
         {
             UnitId = g.UnitId, Side = g.Side, LastKnownPos = g.LastKnownPos,
@@ -860,6 +950,7 @@ public sealed class Simulation
         };
         if (friendLog && g.Side == Side.Enemy)
             Log.Add($"t{Truth.Tick} 【侦获】敌#{g.UnitId} @ {g.LastKnownPos} [观测t{g.ObservedTick}]");
+        return true;
     }
 
     /// <summary>把当前真相世界存为一帧(供复盘动画)。</summary>

@@ -74,6 +74,11 @@ public sealed class Unit
     public Intent? Order { get; set; }
     public bool Routed { get; set; }
 
+    /// <summary>是否本路直辖(玩家可指挥);false = 友军他路(如左翼),只受剧本驱动、玩家无法下令。</summary>
+    public bool PlayerLed { get; init; } = true;
+    /// <summary>剧本接管:敌方效用 AI 跳过该单位(用于脚本化的袭击队等)。</summary>
+    public bool AiExempt { get; set; }
+
     /// <summary>移动进度累积器(按地形成本逐 tick 累加)。</summary>
     public double MoveAccumulator { get; set; }
 

@@ -14,7 +14,8 @@
   - Godot `godot/`:主场景 `Main.tscn` → `GameRoot.cs`,**现已重写为「真实世界·直控 god view」**(方向 = 自底向上:先把真实世界做扎实,信息/认知/沙盘层随后叠)——直接读 Truth、直控部队(无迷雾无延迟)、连续渲染(色块无格线 + **tick 插值平滑** · `BaseTicksPerSec=1.0`)、中键派斥候、迷雾叠加(暗雾+视野亮圈;敌暴露但视野外标「雾中」)、单位属性面板。3D 场景(`GameRoot3D`/`Main3D`)封存当参考。
   - **GUI 启动**:走 `Launch-CommandTent.cmd`(桌面「Godot 4.7 Mono」图标已指向)——系统 `C:\Program Files\dotnet` **无 SDK**,启动器把带 SDK 的便携 `~/.dotnet` 顶到 PATH 最前,否则 Godot 内构建报错。
   - **2026-07-03 增量(内核+视图,19/19 仍过·Godot 0 错)**:①**斥候回报判读**——观测清晰度(近清远糊)→ `JudgeSighting` 把真相判成**估计**(兵力约数带误差、远处兵种认不清),右栏**「敌情·斥候判断」**+ 地图**空心菱形「判~」残影**(与真相错位=情报滞后可视化)。②**兵种优势**:`ResolveRanged`(弓/骑射隔空放箭·射程 4/3·无反击)、骑兵冲锋(移动接敌×1.5)、重步据守抗线(护甲+×1.3);Unit 加 `IsRanged/ShootRange/ArmArmor/IsHeavyFoot/IsCavalry`。③**降速** `MoveRate=0.4`。④**朝向** Unit/Scout 加 `Facing`,视图画箭头鼻子 + 射程圈。
-  - **待用户反馈**:①降速+兵种优势够不够明显 ②斥候判读+右栏敌情对不对 ③是否把内核坐标升**连续 float**(去斜向阶梯感,会动 19 测试)。
+  - **实验分支 `experiment/mvp-blackpine`(2026-07-03)**:第一关做成**可玩的副将体验**——内核加 帅帐链路(分阶段中军令 t0 侦察令 / aidOrderTick 驰援令,LinkDelay 12 送达并激活目标)· `ReportToHq`(上报延迟落账,B/D 目标)· 驰援判定(左翼=PlayerLed:false 两队;本路两队抵旗点 4 格内=成,左翼全灭=败)· 战役窗口 EndTick 到时结算(不必全歼)· `PoliticalJudge` 战后评语(主帅信任 0..100,尚功主帅权重;赢未必赏)· `Alerts`(Pause 级自动暂停)· `ScheduledOrders` 剧本触发(草原袭击队 aidOrderTick-40 扑左翼)。**23/23 测试过**。前端 `GameRoot.cs` 重写为**副将认知视图**:本路实时、目视敌实时标「目视」、其余只有敌影(菱形+约数+年龄)/左翼影(方框)/瞭望烟尘;右键=传令兵送令(有延迟);R 上报 F 探左翼 Q 探问;收讯自动暂停+横幅;战毕结算面板(目标+评语+信任条);Tab 上帝对照。
+  - **待用户反馈**:①降速+兵种优势够不够明显 ②斥候判读+右栏敌情对不对 ③是否把内核坐标升**连续 float**(去斜向阶梯感,会动 23 测试)④实验分支的副将认知视图好不好玩(揪不揪心)。
   - **下一增量(内核)**:帅帐独立认知+**回报上行**(目标 B/D)· **请援** · **左翼 NPC**+任务制硬性胜负(目标 C,替换歼灭占位)· **政治评价**;再后 M-A **混编 combat**。
 - **命令**(PowerShell,`$d = "$env:USERPROFILE\.dotnet\dotnet.exe"`):
   - 测试:`& $d test "D:\git\Central_Command_Post\prototype\CommandPost.sln"`

@@ -57,6 +57,9 @@ public sealed class Messenger
 /// <summary>瞭望台一次实时、低保真的观察(烟尘印象):此刻所见,不入认知世界、不留记忆。</summary>
 public readonly record struct WatchtowerContact(Side Side, Vec2 Pos, ScaleHint Scale);
 
+/// <summary>给玩家的醒目提示(中军令 / 斥候归来 / 使者未归…)。Pause=true 时前端应自动暂停(§时间与节奏)。</summary>
+public readonly record struct Alert(int Tick, string Text, bool Pause);
+
 /// <summary>认知世界里的「最后已知」影子单位。</summary>
 public sealed class GhostUnit
 {
