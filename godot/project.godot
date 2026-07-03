@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="中军帐 · M2-A 战中沙盘"
-run/main_scene="res://Main.tscn"
+config/name="中军帐 · 战斗B档 逐兵实验"
+run/main_scene="res://Battle.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [display]
