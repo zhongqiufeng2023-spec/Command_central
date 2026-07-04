@@ -19,9 +19,9 @@ public partial class GameState : Node
 	/// <summary>本次进帐是否纯扎营(无战事,沙盘空空)。</summary>
 	public bool CampOnly = true;
 
-	// —— 大地图进度 ——
-	public Vector2 PartyPos = new(190, 420);
-	public Vector2 EnemyPos = new(830, 300);
+	// —— 大地图进度(200×130 瓦片 ×16px 世界坐标)——
+	public Vector2 PartyPos = new(55 * 16, 66 * 16);     // 前锋营
+	public Vector2 EnemyPos = new(150 * 16, 64 * 16);    // 当面之敌:黑松岭东缘汛地
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
 

@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 /// <summary>
 /// 将军像素立绘(assets/general.png,8列×4行帧表,单元 128×256):
@@ -23,7 +24,8 @@ public static class GeneralSprite
 		}
 	}
 
-	/// <summary>白底抠透明(精灵表是白底黑边像素画)。</summary>
+	/// <summary>白底抠透明 + 白边羽化:低饱和的亮像素按「接近白的程度」渐隐并压暗,
+	/// 抗锯齿留下的灰白毛边一并处理;皮肤/金甲/红披风饱和度高,不受影响。</summary>
 	private static void KeyOutWhite(Image img)
 	{
 		int w = img.GetWidth(), h = img.GetHeight();
@@ -31,8 +33,14 @@ public static class GeneralSprite
 			for (int x = 0; x < w; x++)
 			{
 				var c = img.GetPixel(x, y);
-				if (c.R > 0.90f && c.G > 0.90f && c.B > 0.90f)
-					img.SetPixel(x, y, new Color(0, 0, 0, 0));
+				float maxc = Math.Max(c.R, Math.Max(c.G, c.B));
+				float minc = Math.Min(c.R, Math.Min(c.G, c.B));
+				float sat = maxc <= 0.001f ? 0f : (maxc - minc) / maxc;
+				if (sat < 0.28f && minc > 0.62f)
+				{
+					float a = Mathf.Clamp((0.80f - minc) / 0.18f, 0f, 1f);   // ≥0.80 全透;0.62~0.80 渐隐
+					img.SetPixel(x, y, new Color(c.R * 0.82f, c.G * 0.82f, c.B * 0.82f, c.A * a));
+				}
 			}
 	}
 
@@ -51,11 +59,11 @@ public static class GeneralSprite
 	}
 	private static Rect2 Cell(int cx, int cy) => new(cx * CellW, cy * CellH, CellW, CellH);
 
-	/// <summary>画在 topLeft 处,尺寸 w×h;Left 自动镜像。</summary>
+	/// <summary>画在 topLeft 处,尺寸 w×h。精灵表侧向帧原生朝左 → Right 镜像、Left 原样。</summary>
 	public static void Draw(CanvasItem c, Vector2 topLeft, float w, float h, Dir d, float phase, bool moving)
 	{
 		var src = Frame(d, phase, moving);
-		if (d == Dir.Left)
+		if (d == Dir.Right)
 		{
 			c.DrawSetTransform(new Vector2(topLeft.X + w / 2f, topLeft.Y), 0, new Vector2(-1, 1));
 			c.DrawTextureRectRegion(Tex, new Rect2(-w / 2f, 0, w, h), src);

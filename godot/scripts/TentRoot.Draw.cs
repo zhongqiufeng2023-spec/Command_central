@@ -146,96 +146,108 @@ public partial class TentRoot
 
 	private void DrawTowerView()
 	{
-		DrawRect(new Rect2(0, 0, 1120, 760), new Color("11100c"), true);
-		var center = new Vector2(560, 390);
+		// —— 台上东望:第一人称地平线视角 ——
+		// 方位 → 横向(左北右南,正前为东);远近 → 透视(越远越贴地平线、越小越淡)。
+		const float HorizonY = 320f, Fov = 1.83f;                        // ±105° 视界,身后是本营
+
+		// 暮色天空(四段渐变)
+		DrawRect(new Rect2(0, 0, 1120, 110), new Color("1a1c26"), true);
+		DrawRect(new Rect2(0, 110, 1120, 90), new Color("2a2830"), true);
+		DrawRect(new Rect2(0, 200, 1120, 70), new Color("463830"), true);
+		DrawRect(new Rect2(0, 270, 1120, HorizonY - 270), new Color("5e4632"), true);
+
+		// 远山与黑松岭剪影(地平线上的锯齿)
+		for (int i = 0; i < 56; i++)
+		{
+			float x = i * 20f;
+			float hRidge = 14f + 26f * H(i * 3 + 7) + (i > 20 && i < 40 ? 22f : 0);   // 中段偏高=黑松岭
+			DrawRect(new Rect2(x, HorizonY - hRidge, 21, hRidge), new Color(0.10f, 0.13f, 0.09f), true);
+		}
+		// 地面(台下原野,向远处收暗)
+		DrawRect(new Rect2(0, HorizonY, 1120, 200), new Color("3f3d2c"), true);
+		DrawRect(new Rect2(0, HorizonY + 200, 1120, 760 - HorizonY - 200), new Color("46442f"), true);
 
 		if (GameState.I.Battle is { } b)
 		{
-			const float S = 0.55f;                                       // 米 → 像素
 			var tower = b.HqPos;
-
-			// 地形剪影(辨方位用,极暗)
-			for (int ty = 0; ty < b.Map.H; ty++)
-				for (int tx = 0; tx < b.Map.W; tx++)
-				{
-					var t = b.Map.AtTile(tx, ty);
-					if (t == BTerrain.Grass) continue;
-					var wp = new Vec2F((tx + 0.5f) * BattleMap.TileSize, (ty + 0.5f) * BattleMap.TileSize);
-					var sp = center + new Vector2(wp.X - tower.X, wp.Y - tower.Y) * S;
-					Color c = t switch
-					{
-						BTerrain.Forest => new Color(0.16f, 0.20f, 0.13f),
-						BTerrain.River or BTerrain.Ford => new Color(0.13f, 0.19f, 0.22f),
-						BTerrain.Hill => new Color(0.20f, 0.19f, 0.16f),
-						_ => new Color(0.16f, 0.15f, 0.12f)
-					};
-					DrawRect(new Rect2(sp, new Vector2(BattleMap.TileSize * S + 1, BattleMap.TileSize * S + 1)), c, true);
-				}
-
-			// 自家帐位
-			DrawRect(new Rect2(center - new Vector2(4, 4), new Vector2(8, 8)), new Color("d9b34a"), true);
-
 			foreach (var u in b.Units)
 			{
 				if (u.AliveCount == 0) continue;
 				var rel = new Vector2(u.Center.X - tower.X, u.Center.Y - tower.Y);
-				float dist = rel.Length();
-				var sp = center + rel * S;
-				float wobble = 3f + dist * 0.035f;                       // 越远越测不准
-				float fade = Mathf.Clamp(1.25f - dist / 750f, 0.25f, 1f);
+				float dist = Mathf.Max(20f, rel.Length());
+				float bearing = Mathf.Atan2(rel.Y, rel.X);               // 0=正东;负=北(屏左),正=南(屏右)
+				if (Mathf.Abs(bearing) > Fov) continue;                  // 身后(本营方向)看不见
+
+				float x = 560f + bearing / Fov * 530f;
+				float y = HorizonY + (720f - HorizonY) * (70f / (dist + 70f));   // 透视:远→贴地平线
+				float s = Mathf.Clamp(150f / (dist + 50f), 0.10f, 1.8f);          // 透视:远→小
+				float fade = Mathf.Clamp(1.3f - dist / 900f, 0.3f, 1f);
 				bool friend = u.Side == Side.Friend;
 
-				// 黑点群:点数 ≈ 人数/25(你只能估出「一小撮」还是「黑压压一片」)
+				// 黑点群:点多则众(人数/25),你只能估「一小撮」还是「黑压压一片」
 				int dots = Math.Clamp(u.AliveCount / 25, 1, 12);
 				for (int i = 0; i < dots; i++)
 				{
-					var off = new Vector2(
-						(H(u.Id * 31 + i) - 0.5f) * 2f * (6f + wobble),
-						(H(u.Id * 57 + i) - 0.5f) * 2f * (5f + wobble * 0.7f));
-					var col = friend ? new Color(0.28f, 0.12f, 0.10f, 0.85f * fade)
-									 : new Color(0.05f, 0.05f, 0.06f, 0.9f * fade);
-					DrawCircle(sp + off, friend ? 2.2f : 2.6f, col);
+					var off = new Vector2((H(u.Id * 31 + i) - 0.5f) * 76f * s,
+										  (H(u.Id * 57 + i) - 0.5f) * 14f * s);
+					var col = friend ? new Color(0.30f, 0.13f, 0.10f, 0.85f * fade)
+									 : new Color(0.04f, 0.04f, 0.05f, 0.92f * fade);
+					DrawCircle(new Vector2(x, y) + off, (friend ? 2.0f : 2.4f) + 2.4f * s, col);
 				}
 
-				// 敌队扬尘/烟:柱数与浓度 ≈ 规模;远则淡(远近的第二信号)
+				// 虏骑扬尘:烟柱从地面升起——烟浓且高 = 近且众
 				if (!friend)
 				{
 					int plumes = Math.Clamp(u.AliveCount / 60, 1, 4);
 					for (int i = 0; i < plumes; i++)
 					{
 						float ph = ((float)_t * 0.25f + H(u.Id * 13 + i)) % 1f;
-						var pp = sp + new Vector2((H(u.Id * 7 + i) - 0.5f) * 22f, -6f - ph * 34f);
-						DrawCircle(pp, 5f + ph * 12f, new Color(0.62f, 0.58f, 0.50f, 0.28f * (1 - ph) * fade));
+						var pp = new Vector2(x + (H(u.Id * 7 + i) - 0.5f) * 40f * s, y - 4f - ph * 95f * s);
+						DrawCircle(pp, (4f + ph * 15f) * Mathf.Max(s, 0.35f),
+							new Color(0.62f, 0.58f, 0.50f, 0.30f * (1 - ph) * fade));
 					}
 				}
 			}
 
-			DrawString(_font, new Vector2(16, 26), $"瞭望台 · 亲见  {BattleSim.FormatT(b.Time)}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+			DrawString(_font, new Vector2(16, 26), $"瞭望台 · 凭栏东望  {BattleSim.FormatT(b.Time)}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 			DrawString(_font, new Vector2(16, 48),
-				"黑点=队伍(点多则众) · 扬尘=虏骑(烟浓则近且众) · 记下方位,回沙盘插旗推演 | E/Esc 下台",
+				"黑点=队伍(点多则众) · 扬尘=虏骑(烟浓且高=近且众) · 左北右南,身后即本营 | E/Esc 下台",
 				HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
 		}
 		else
 		{
-			// 无战事:望大地图方向——虏骑游队的扬尘(或四野无烟)
-			DrawString(_font, new Vector2(16, 26), "瞭望台 · 四野", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+			DrawString(_font, new Vector2(16, 26), "瞭望台 · 凭栏东望", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 			if (!GameState.I.EnemyDefeated)
 			{
-				var rel = (GameState.I.EnemyPos - GameState.I.PartyPos) * 0.9f;
-				var sp = center + rel;
+				// 无战事:望见大地图方向的虏骑扬尘
+				var rel = GameState.I.EnemyPos - GameState.I.PartyPos;
+				float dist = Mathf.Max(60f, rel.Length() * 2.2f);
+				float bearing = Mathf.Clamp(Mathf.Atan2(rel.Y, rel.X), -Fov, Fov);
+				float x = 560f + bearing / Fov * 530f;
+				float y = HorizonY + (720f - HorizonY) * (70f / (dist + 70f));
+				float s = Mathf.Clamp(150f / (dist + 50f), 0.10f, 1.2f);
 				for (int i = 0; i < 3; i++)
 				{
 					float ph = ((float)_t * 0.22f + i * 0.31f) % 1f;
-					DrawCircle(sp + new Vector2((i - 1) * 10f, -ph * 40f), 6f + ph * 14f,
+					DrawCircle(new Vector2(x + (i - 1) * 16f * s, y - ph * 80f * s), (5f + ph * 13f) * Mathf.Max(s, 0.4f),
 						new Color(0.62f, 0.58f, 0.50f, 0.30f * (1 - ph)));
 				}
-				DrawCircle(sp, 3f, new Color(0.05f, 0.05f, 0.06f, 0.9f));
-				DrawString(_font, new Vector2(16, 48), "远处有扬尘——虏骑未去。E/Esc 下台", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
+				DrawString(_font, new Vector2(16, 48), "天际有扬尘——虏骑未去。E/Esc 下台", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
 			}
 			else
 				DrawString(_font, new Vector2(16, 48), "四野无烟尘,边野暂安。E/Esc 下台", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
-			DrawRect(new Rect2(center - new Vector2(4, 4), new Vector2(8, 8)), new Color("d9b34a"), true);
 		}
+
+		// 方位标
+		DrawString(_font, new Vector2(548, 78), "东", HorizontalAlignment.Left, -1, 14, new Color(0.9f, 0.85f, 0.7f, 0.6f));
+		DrawString(_font, new Vector2(30, 78), "◀ 北", HorizontalAlignment.Left, -1, 13, new Color(0.9f, 0.85f, 0.7f, 0.45f));
+		DrawString(_font, new Vector2(1040, 78), "南 ▶", HorizontalAlignment.Left, -1, 13, new Color(0.9f, 0.85f, 0.7f, 0.45f));
+
+		// 台上前景:木栏杆
+		DrawRect(new Rect2(0, 700, 1120, 60), new Color("2e2318"), true);
+		DrawRect(new Rect2(0, 694, 1120, 10), new Color("4a3a26"), true);
+		for (int i = 0; i < 12; i++)
+			DrawRect(new Rect2(40 + i * 96, 700, 14, 60), new Color("3c2e1e"), true);
 
 		DrawBannerLine();
 	}
