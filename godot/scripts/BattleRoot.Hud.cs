@@ -12,7 +12,7 @@ public partial class BattleRoot
 		string mode = _realView ? "真实战场(对照,Tab切回)" : "沙盘·帅帐所知";
 		DrawText(new Vector2(16, 22), $"黑松岭之战 · {mode}   {BattleSim.FormatT(_sim.Time)} {clock}", 15, new Color("e8e0d0"));
 		DrawText(new Vector2(16, 42),
-			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 4游走 R探问 | 中键塘骑 Ctrl+左键插旗",
+			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 4游走 R探问 | 中键塘骑 Ctrl+左插旗 | Esc回帐 F1低难度",
 			11, new Color("9aa0a8"));
 
 		if (!_realView && _selectedId >= 0 && _sim.Sandbox.Own.TryGetValue(_selectedId, out var mk))
@@ -72,6 +72,7 @@ public partial class BattleRoot
 		int eDead = _sim.Units.Where(u => u.Side == Side.Enemy).Sum(u => u.MaxCount - u.AliveCount - u.Fled);
 		int eFled = _sim.Units.Where(u => u.Side == Side.Enemy).Sum(u => u.Fled);
 		DrawText(new Vector2(x, y), $"虏军:遗尸约{eDead},溃逃出野约{eFled}", 12, new Color("bcd2ec")); y += 30;
+		DrawText(new Vector2(x, y), "回车 · 班师回营(返回大地图)", 13, new Color("e6c25c")); y += 22;
 		DrawText(new Vector2(x, y), "(政治评语与帅帐问责,待接入战役层)", 11, new Color("9aa0a8"));
 	}
 

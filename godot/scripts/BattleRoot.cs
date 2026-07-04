@@ -33,7 +33,8 @@ public partial class BattleRoot : Node2D
 
 	public override void _Ready()
 	{
-		_sim = BattleScenario.BlackPineField();
+		// 战役来自 GameState(大地图遭遇时创建);单独 F6 跑本场景时兜底自建
+		_sim = GameState.I?.Battle ?? BattleScenario.BlackPineField();
 
 		var sf = new SystemFont();
 		sf.FontNames = new[] { "Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "SimSun" };
@@ -110,8 +111,23 @@ public partial class BattleRoot : Node2D
 			case Key.Key2: SendStance(BStance.Hold); break;
 			case Key.Key3: SendStance(BStance.Standby); break;
 			case Key.Key4: SendStance(BStance.Skirmish); break;
+			case Key.F1:
+				if (GameState.I != null)
+				{
+					GameState.I.EasySandboxVision = !GameState.I.EasySandboxVision;
+					_banner = $"低难度·沙盘瞭望叠加:{(GameState.I.EasySandboxVision ? "开" : "关(要看敌情,回帐登瞭望台)")}";
+					_bannerAge = 0;
+				}
+				break;
 			case Key.Home: _cam = new Vector2(_sim.Map.WorldW / 2f, _sim.Map.WorldH / 2f); _zoom = 0.9f; break;
-			case Key.Escape: _selectedId = -1; break;
+			case Key.Enter or Key.KpEnter when _sim.Over:
+				GameState.I?.EndBattleReturn();
+				GameState.Go(this, "res://Overworld.tscn");
+				break;
+			case Key.Escape:
+				if (GameState.I != null) GameState.Go(this, "res://Tent.tscn");   // 回中军帐(战役照常推进)
+				else _selectedId = -1;
+				break;
 		}
 		QueueRedraw();
 	}

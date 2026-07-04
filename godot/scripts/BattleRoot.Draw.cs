@@ -98,13 +98,17 @@ public partial class BattleRoot
 	{
 		float now = _sim.Time;
 
-		// 瞭望台:帅帐望楼的实时视界(圈内所见即真——低保真但零延迟)
-		var live = _sim.WatchtowerVisible().ToList();
+		// 瞭望叠加 = 低难度选项(F1)。默认关:想看敌情,回中军帐亲自登瞭望台(黑点与烟雾)。
+		bool easyVision = GameState.I?.EasySandboxVision ?? true;
+		var live = easyVision ? _sim.WatchtowerVisible().ToList() : new List<BattleUnit>();
 		var liveIds = new HashSet<int>(live.Select(u => u.Id));
-		DrawArc(ToScreen(_sim.HqPos), _sim.WatchtowerRange * _zoom, 0, Mathf.Tau, 64,
-			new Color(0.85f, 0.75f, 0.45f, 0.30f), 1.5f, true);
-		DrawText(ToScreen(_sim.HqPos) + new Vector2(0, _sim.WatchtowerRange * _zoom + 12), "瞭望所及", 10,
-			new Color(0.85f, 0.75f, 0.45f, 0.5f), center: true);
+		if (easyVision)
+		{
+			DrawArc(ToScreen(_sim.HqPos), _sim.WatchtowerRange * _zoom, 0, Mathf.Tau, 64,
+				new Color(0.85f, 0.75f, 0.45f, 0.30f), 1.5f, true);
+			DrawText(ToScreen(_sim.HqPos) + new Vector2(0, _sim.WatchtowerRange * _zoom + 12), "瞭望所及(低难度)", 10,
+				new Color(0.85f, 0.75f, 0.45f, 0.5f), center: true);
+		}
 
 		// 信息旗
 		foreach (var f in _sim.Sandbox.Flags)
