@@ -28,7 +28,7 @@ public static class BattleScenario
         sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("俟斤",   Personality.Aggressive, 0.68), new Vec2F(860, 260), 200, ai: true);
         sim.AddUnit(Side.Enemy, UnitType.TribalFoot,  "部众", new Commander("杂胡",   Personality.Steady,     0.68), new Vec2F(890, 300), 220, ai: true);
         sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.68), new Vec2F(860, 110), 200, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.68), new Vec2F(890, 440), 150, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.68), new Vec2F(895, 400), 150, ai: true);
 
         sim.Feed("帅帐军情:虏骑现于黑松岭以东,兵力不详。各部就位,听令而动。");
         return sim;

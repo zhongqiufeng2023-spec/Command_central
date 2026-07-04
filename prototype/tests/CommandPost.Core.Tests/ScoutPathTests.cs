@@ -48,6 +48,18 @@ public class ScoutPathTests
     }
 
     [Fact]
+    public void Enemy_DoesNotSpawnOrStallInRiver()
+    {
+        var sim = BattleScenario.BlackPineField();
+        // 开局:没有任何单位生成在河里(不可通行地形)
+        Assert.DoesNotContain(sim.Units, u => BattleMap.Passable(sim.Map.At(u.Center)) == false);
+
+        for (int i = 0; i < 400 && !sim.Over; i++) sim.Tick();   // 40s 后仍无单位卡在河中
+        Assert.DoesNotContain(sim.Units.Where(u => u.AliveCount > 0),
+            u => sim.Map.At(u.Center) == BTerrain.River);
+    }
+
+    [Fact]
     public void Path_FromHq_ToNorthEast_ActuallyBends()
     {
         var sim = EmptyField();

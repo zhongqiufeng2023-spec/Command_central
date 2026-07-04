@@ -82,10 +82,16 @@ public sealed class BattleSim
     private int _nextUnit = 1, _nextSoldier = 1, _nextRider = 1, _nextFlag = 1;
     private readonly Dictionary<int, BattleUnit> _byId = new();
     private readonly Dictionary<(int, int), List<Soldier>> _hash = new();
-    /// <summary>敌方共享记忆:我方部队「最后所见」(敌 AI 的对称迷雾,简化版)。</summary>
-    private readonly Dictionary<int, (Vec2F pos, float t)> _enemyKnown = new();
+    /// <summary>敌方共享记忆:我方部队「最后所见」快照(非实时——敌 AI 也吃情报滞后,与玩家对称)。</summary>
+    private readonly Dictionary<int, (Vec2F pos, float seenT)> _enemyKnown = new();
+    /// <summary>发现→全军知晓之间的传讯延迟队列(readyT 到点才并入共享记忆)。</summary>
+    private readonly Dictionary<int, (Vec2F pos, float readyT)> _enemyPending = new();
     private float _endClock, _spotClock;
     private const float HashCell = 3f;
+    private const float EnemyReactLag = 5f;    // 敌方发现你→全军协同的反应延迟(对标玩家令骑往返)
+    private const float EnemyRefresh = 7f;     // 已知目标的快照刷新间隔(看得见也不实时跟,会扑「最后所见」)
+    private const float EnemyForget = 45f;     // 失去接触后遗忘
+    private const float EnemyCloseVision = 60f; // 近身实时反应半径(免贴脸还站桩)
 
     public BattleSim(BattleMap map, Rng rng) { Map = map; _rng = rng; }
 
@@ -219,20 +225,33 @@ public sealed class BattleSim
         CheckBattleEnd();
     }
 
-    // —— 敌方对称迷雾(简化):敌单位 110m 视界(林中打折)看见我方即记入共享记忆,40s 后遗忘 ——
+    // —— 敌方对称迷雾:发现你 → 隔 EnemyReactLag 全军才知晓,存的是「最后所见」快照(非实时制导),
+    //    失接触 EnemyForget 后遗忘。敌方和你一样吃情报滞后,不再「你一露头全军神反应」。——
     private void UpdateEnemyKnowledge()
     {
         _spotClock += Dt;
         if (_spotClock < 1f) return;
         _spotClock = 0;
+
         foreach (var f in Units.Where(x => x.Side == Side.Friend && x.AliveCount > 0))
         {
             float conceal = BattleMap.ConcealMult(Map.At(f.Center));
-            foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AliveCount > 0))
-                if (e.Center.DistanceTo(f.Center) <= 110f * conceal)
-                { _enemyKnown[f.Id] = (f.Center, Time); break; }
+            bool seen = Units.Any(e => e.Side == Side.Enemy && e.AliveCount > 0
+                                    && e.Center.DistanceTo(f.Center) <= 110f * conceal);
+            if (!seen) continue;
+
+            if (_enemyKnown.TryGetValue(f.Id, out var k))
+            {
+                if (Time - k.seenT >= EnemyRefresh) _enemyKnown[f.Id] = (f.Center, Time);   // 半实时刷新快照
+            }
+            else if (!_enemyPending.ContainsKey(f.Id))
+                _enemyPending[f.Id] = (f.Center, Time + EnemyReactLag);                     // 发现:先入延迟队列
         }
-        foreach (var k in _enemyKnown.Where(kv => Time - kv.Value.t > 40f).Select(kv => kv.Key).ToList())
+
+        foreach (var kv in _enemyPending.Where(kv => Time >= kv.Value.readyT).ToList())
+        { _enemyKnown[kv.Key] = (kv.Value.pos, Time); _enemyPending.Remove(kv.Key); }        // 到点 → 全军知晓
+
+        foreach (var k in _enemyKnown.Where(kv => Time - kv.Value.seenT > EnemyForget).Select(kv => kv.Key).ToList())
             _enemyKnown.Remove(k);
     }
 
@@ -242,22 +261,28 @@ public sealed class BattleSim
         {
             e.ThinkClock -= Dt;
             if (e.ThinkClock > 0) continue;
-            e.ThinkClock = 2.5f;
+            e.ThinkClock = 4f;
 
-            (Vec2F pos, float t)? known = null;
-            float kb = float.MaxValue;
-            foreach (var kv in _enemyKnown.Values)
+            // 近身实时反应(免贴脸站桩);否则用「延迟共享 + 最后所见快照」情报
+            var close = NearestUnit(e.Center, Side.Friend);
+            Vec2F? goal = close != null && close.Center.DistanceTo(e.Center) <= EnemyCloseVision ? close.Center : null;
+            if (goal is null)
             {
-                float d = kv.pos.DistanceTo(e.Center);
-                if (d < kb) { kb = d; known = kv; }
+                float kb = float.MaxValue;
+                foreach (var kv in _enemyKnown.Values)
+                {
+                    float d = kv.pos.DistanceTo(e.Center);
+                    if (d < kb) { kb = d; goal = kv.pos; }
+                }
             }
-            if (known is { } kn)
+
+            if (goal is { } kn)
             {
-                float dist = kn.pos.DistanceTo(e.Center);
+                float dist = kn.DistanceTo(e.Center);
                 if (BArms.Ranged(e.Type) && e.Soldiers.Any(s => s.Ammo > 0))
-                    SkirmishStep(e, kn.pos, dist);                          // 骑射风筝:射程带内游走放箭
+                    SkirmishStep(e, kn, dist);                              // 骑射风筝:射程带内游走放箭
                 else if (dist > 14f)
-                    e.SetOrderDirect(kn.pos, dist < 120f && BArms.IsCav(e.Type), Map);   // 箭尽/近战:压上肉搏
+                    e.SetOrderDirect(kn, dist < 120f && BArms.IsCav(e.Type), Map);   // 箭尽/近战:压上肉搏
             }
             else if (e.State == BUnitState.Steady && e.Path.Count == 0)
                 e.SetOrderDirect(Map.Clamp(e.Center + new Vec2F(-90f, 0)), false, Map);   // 无敌情:徐进压上
