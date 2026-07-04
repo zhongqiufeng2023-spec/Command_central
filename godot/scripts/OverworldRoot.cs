@@ -16,8 +16,7 @@ public partial class OverworldRoot : Node2D
 
 	private Vector2 _pos;                        // 我方仪仗位置(像素)
 	private Vector2? _moveTarget;                // 点击行军目标
-	private GeneralSprite.Dir _dir = GeneralSprite.Dir.Right;
-	private float _phase;
+	private bool _faceLeft;
 	private bool _moving;
 
 	private Vector2 _enemy;
@@ -106,10 +105,7 @@ public partial class OverworldRoot : Node2D
 				if (Passable(At(slideX))) _pos = slideX;
 				else if (Passable(At(slideY))) _pos = slideY;
 			}
-			_phase = (_phase + dt * 1.6f) % 1f;
-			_dir = Mathf.Abs(dir.X) >= Mathf.Abs(dir.Y)
-				? (dir.X >= 0 ? GeneralSprite.Dir.Right : GeneralSprite.Dir.Left)
-				: (dir.Y >= 0 ? GeneralSprite.Dir.Down : GeneralSprite.Dir.Up);
+			if (Mathf.Abs(dir.X) > 0.01f) _faceLeft = dir.X < 0;
 		}
 
 		// —— 虏骑游队:黑松岭以东游弋;见我则追 ——
@@ -187,11 +183,22 @@ public partial class OverworldRoot : Node2D
 			DrawLabel(_enemy + new Vector2(0, -18), "虏骑", new Color("bcd2ec"));
 		}
 
-		// 我方仪仗:将军立绘 + 牙旗
-		var top = _pos + new Vector2(-14, -52);
-		GeneralSprite.Draw(this, top, 28, 56, _dir, _phase, _moving);
-		DrawLine(_pos + new Vector2(12, -50), _pos + new Vector2(12, -30), new Color("c8b088"), 2f);
-		DrawColoredPolygon(new[] { _pos + new Vector2(12, -50), _pos + new Vector2(26, -46), _pos + new Vector2(12, -41) }, new Color("b03a2e"));
+		// 我方仪仗:大地图上是一队人马(骑砍式队伍标记)——将军本人的立绘在中军帐/营区
+		float fx = _faceLeft ? -1f : 1f;
+		if (_moving)                                                    // 行进扬尘
+			for (int i = 0; i < 3; i++)
+			{
+				float ph = ((float)_t0 * 0.8f + i * 0.33f) % 1f;
+				DrawCircle(_pos + new Vector2((-10 - ph * 14) * fx, -1 - ph * 7), 2.5f + ph * 4.5f,
+					new Color(0.62f, 0.58f, 0.5f, 0.3f * (1 - ph)));
+			}
+		var umber = new Color(0.42f, 0.16f, 0.12f);                     // 大酆深红骑影×3
+		DrawCircle(_pos + new Vector2(-7 * fx, 3), 5f, umber.Darkened(0.15f));
+		DrawCircle(_pos + new Vector2(2 * fx, -1), 6f, umber);
+		DrawCircle(_pos + new Vector2(10 * fx, 3), 4.5f, umber.Darkened(0.1f));
+		DrawLine(_pos + new Vector2(2 * fx, -4), _pos + new Vector2(2 * fx, -26), new Color("c8b088"), 2f);
+		DrawColoredPolygon(new[] { _pos + new Vector2(2 * fx, -26), _pos + new Vector2((2 + 15 * fx), -21.5f), _pos + new Vector2(2 * fx, -17) }, new Color("d9b34a"));
+		DrawLabel(_pos + new Vector2(0, -34), "本部", new Color("ffd9a0"));
 
 		if (_moveTarget is { } t2)
 			DrawArc(t2, 6f, 0, Mathf.Tau, 16, new Color(1, 1, 1, 0.5f), 1.5f);
