@@ -56,6 +56,8 @@ public sealed class BattleUnit
     public bool Shaken;              // 溃而复聚:士气上限打折
     public float ChargeT;            // 冲锋窗口(骑兵冲入接战后短暂的高伤害)
     public float SpeedNow;           // 中心实际移速(判冲锋)
+    public float EngagedT;           // 连续缠斗时长(骑兵判「该凿穿了」)
+    public float DisengageT;         // 穿插窗口:>0 时骑队凿穿阵背而出(不恋战、边走边砍)
 
     public bool AiControlled;        // 敌方:简单单位级 AI
     public float ThinkClock, MoraleClock, ReportClock, EventCooldown, RoutClock, RallyClock;

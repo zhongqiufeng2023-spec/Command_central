@@ -131,10 +131,64 @@ public class BattleSimTests
         var arrow = new Arrow { Origin = new Vec2F(60, 80), RawDamage = 50f, Shooter = UnitType.Bow, Side = Side.Friend };
 
         sh.Facing = new Vec2F(-1, 0);                                  // 盾墙迎着弓手
-        float front = BattleSim.ArrowDamage(arrow, sh);
+        float front = BattleSim.ArrowDamage(arrow, sh, sim.Map);
         sh.Facing = new Vec2F(1, 0);                                   // 背对
-        float back = BattleSim.ArrowDamage(arrow, sh);
+        float back = BattleSim.ArrowDamage(arrow, sh, sim.Map);
         Assert.True(front < back * 0.5f, $"迎盾应大幅减伤:迎面{front:0.0} vs 背对{back:0.0}");
+    }
+
+    [Fact]
+    public void LightCavalry_ShootsBow()
+    {
+        var sim = Sim();
+        var cav = sim.AddUnit(Side.Friend, UnitType.Cavalry, "游骑", new Commander("甲", Personality.Steady), new Vec2F(60, 80), 40);
+        var foe = sim.AddUnit(Side.Enemy, UnitType.TribalFoot, "众", new Commander("乙", Personality.Steady), new Vec2F(150, 80), 60);
+        Run(sim, 30f);                                                 // 90m ≤ 游骑弓 100m
+        Assert.True(foe.AliveCount < 60, "游骑应能张弓杀伤");
+        Assert.True(cav.Soldiers.Any(s => s.Ammo < 12), "游骑有人放过箭");
+    }
+
+    [Fact]
+    public void LightCavalry_OutOfAmmo_ChargesIn()
+    {
+        var sim = Sim();
+        var cav = sim.AddUnit(Side.Friend, UnitType.Cavalry, "游骑", new Commander("甲", Personality.Steady), new Vec2F(80, 80), 40);
+        cav.Stance = BStance.Skirmish;
+        foreach (var s in cav.Soldiers) s.Ammo = 0;                    // 箭壶已空
+        var foe = sim.AddUnit(Side.Enemy, UnitType.TribalFoot, "众", new Commander("乙", Personality.Steady), new Vec2F(200, 80), 50);
+        Run(sim, 40f);
+        Assert.True(cav.Kills > 0 || foe.AliveCount < 50, "箭尽应拔刀冲上去");
+    }
+
+    [Fact]
+    public void Cataphract_UnderAttackStance_CyclesCharge()
+    {
+        var sim = Sim();
+        var cat = sim.AddUnit(Side.Friend, UnitType.Cataphract, "铁骑", new Commander("甲", Personality.Steady), new Vec2F(80, 80), 60);
+        cat.Stance = BStance.Attack;
+        // 用高甲高士气的盾墙当磨盘:缠斗必然超过穿插阈值(部众之流 6 秒内就被铁骑打崩,测不到穿插)
+        sim.AddUnit(Side.Enemy, UnitType.Shield, "盾", new Commander("乙", Personality.Steady, 1.0), new Vec2F(160, 80), 250);
+
+        bool punchedThrough = false;
+        for (int i = 0; i < 600 && !sim.Over; i++)
+        {
+            sim.Tick();
+            if (cat.DisengageT > 0) punchedThrough = true;             // 缠斗过久 → 凿穿而出
+        }
+        Assert.True(punchedThrough, "铁骑久缠应穿插脱出、回身再冲");
+    }
+
+    [Fact]
+    public void HillTerrain_ReducesArrowDamage()
+    {
+        var sim = Sim();
+        sim.Map.Paint(10, 5, 10, 5, BTerrain.Hill);
+        var sh = sim.AddUnit(Side.Enemy, UnitType.Spear, "枪", new Commander("乙", Personality.Steady), new Vec2F(150, 80), 10);
+        var onHill = new Arrow { Origin = new Vec2F(60, 80), Pos = new Vec2F(168, 88), RawDamage = 50f, Shooter = UnitType.Bow, Side = Side.Friend };
+        var onGrass = new Arrow { Origin = new Vec2F(60, 80), Pos = new Vec2F(60, 40), RawDamage = 50f, Shooter = UnitType.Bow, Side = Side.Friend };
+        float hill = BattleSim.ArrowDamage(onHill, sh, sim.Map);
+        float grass = BattleSim.ArrowDamage(onGrass, sh, sim.Map);
+        Assert.True(hill < grass, $"丘上受箭应减伤:{hill:0.0} vs {grass:0.0}");
     }
 
     [Fact]

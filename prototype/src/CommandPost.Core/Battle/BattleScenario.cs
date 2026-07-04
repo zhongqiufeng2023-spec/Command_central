@@ -22,13 +22,13 @@ public static class BattleScenario
         sim.AddUnit(Side.Friend, UnitType.Cavalry,    "游骑",   new Commander("秦锐",   Personality.Aggressive, 0.70), new Vec2F(170, 420), 160);
         sim.AddUnit(Side.Friend, UnitType.Cataphract, "铁骑",   new Commander("呼延豹", Personality.Aggressive, 0.72), new Vec2F(170, 120), 180);
 
-        // —— 草原(东,AI;劫掠偏师,兵力略逊——但骑射风筝仍要用脑子解)——
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("阿史那", Personality.Cunning,    0.68), new Vec2F(810, 160), 170, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("咄陆",   Personality.Cunning,    0.68), new Vec2F(810, 390), 170, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("俟斤",   Personality.Aggressive, 0.68), new Vec2F(860, 260), 200, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.TribalFoot,  "部众", new Commander("杂胡",   Personality.Steady,     0.68), new Vec2F(890, 300), 220, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.68), new Vec2F(860, 110), 200, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.68), new Vec2F(895, 400), 150, ai: true);
+        // —— 草原(东,AI;远来劫掠的疲师:兵少、军官庸,容易被打崩——第一关要让玩家赢得漂亮)——
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("阿史那", Personality.Cunning,    0.55), new Vec2F(810, 160), 150, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("咄陆",   Personality.Cunning,    0.55), new Vec2F(810, 390), 150, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("俟斤",   Personality.Aggressive, 0.55), new Vec2F(860, 260), 190, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.TribalFoot,  "部众", new Commander("杂胡",   Personality.Steady,     0.55), new Vec2F(890, 300), 200, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.55), new Vec2F(860, 110), 180, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.55), new Vec2F(895, 400), 130, ai: true);
 
         sim.Feed("帅帐军情:虏骑现于黑松岭以东,兵力不详。各部就位,听令而动。");
         return sim;
@@ -63,6 +63,14 @@ public static class BattleScenario
         // 丘陵:东北高地、西南缓丘
         m.Paint(45, 4, 53, 9, BTerrain.Hill);
         m.Paint(6, 20, 12, 25, BTerrain.Hill);
+
+        // 西缘矮丘:玩家阵前的防守锚点(居高临下,受击减伤 ×0.85——摆盾枪在此,稳)
+        m.Paint(8, 8, 12, 12, BTerrain.Hill);
+
+        // 疏林数丛:两翼遮蔽与伏兵位(林中难被望见,受击 ×0.9,但行速慢)
+        m.Paint(17, 3, 20, 5, BTerrain.Forest);     // 北翼小林
+        m.Paint(19, 20, 22, 22, BTerrain.Forest);   // 官道南小林
+        m.Paint(40, 20, 43, 23, BTerrain.Forest);   // 东南疏林(敌骑绕后的必经遮蔽)
 
         return m;
     }

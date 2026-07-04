@@ -82,6 +82,10 @@ public sealed class BattleMap
     /// <summary>视认倍率(按目标所在地形):林中难见。</summary>
     public static float ConcealMult(BTerrain t) => t == BTerrain.Forest ? 0.45f : 1f;
 
+    /// <summary>受击减伤(按受击者所在地形):丘=居高临下,林=有遮蔽——地形不再只是走得快慢。</summary>
+    public static float DefenseMult(BTerrain t) => t switch
+    { BTerrain.Hill => 0.85f, BTerrain.Forest => 0.9f, _ => 1f };
+
     public Vec2F Clamp(Vec2F p) =>
         new(Math.Clamp(p.X, 2, WorldW - 2), Math.Clamp(p.Y, 2, WorldH - 2));
 
@@ -217,13 +221,18 @@ public static class BArms
         UnitType.TribalFoot => 0.95f, UnitType.HorseArcher => 0.9f, UnitType.Bow => 0.75f, _ => 1f
     };
 
-    public static bool Ranged(UnitType t) => t is UnitType.Bow or UnitType.HorseArcher;
-    /// <summary>射程(米)。弩(Bow)远而慢装——骑射(120)被弩(160)反制;骑射近而快装但箭少、马上放箭散布大。</summary>
-    public static float RangeOf(UnitType t) => t switch { UnitType.Bow => 160f, UnitType.HorseArcher => 120f, _ => 0f };
-    public static float RangedDamage(UnitType t) => t == UnitType.Bow ? 58f : 34f;
-    public static (float min, float max) ReloadOf(UnitType t) => t == UnitType.Bow ? (8f, 11f) : (5f, 7.5f);
-    /// <summary>随队箭矢:骑射箭壶浅(18),射空必须近身肉搏——风筝有尽头。</summary>
-    public static int AmmoOf(UnitType t) => t == UnitType.Bow ? 22 : 18;
+    /// <summary>远程兵种:弩、骑射,以及大酆游骑(轻骑挂弓——先游走放箭,箭尽拔刀冲锋)。</summary>
+    public static bool Ranged(UnitType t) => t is UnitType.Bow or UnitType.HorseArcher or UnitType.Cavalry;
+    /// <summary>射程(米)。弩(Bow)远而慢装——骑射(120)被弩(160)反制;游骑弓短(100)但近战远胜骑射。</summary>
+    public static float RangeOf(UnitType t) => t switch
+    { UnitType.Bow => 160f, UnitType.HorseArcher => 120f, UnitType.Cavalry => 100f, _ => 0f };
+    public static float RangedDamage(UnitType t) => t switch
+    { UnitType.Bow => 58f, UnitType.HorseArcher => 34f, UnitType.Cavalry => 30f, _ => 0f };
+    public static (float min, float max) ReloadOf(UnitType t) => t switch
+    { UnitType.Bow => (8f, 11f), UnitType.Cavalry => (6f, 9f), _ => (5f, 7.5f) };
+    /// <summary>随队箭矢:骑射箭壶浅(18)、游骑更浅(12)——风筝有尽头,箭尽换刀。</summary>
+    public static int AmmoOf(UnitType t) => t switch
+    { UnitType.Bow => 22, UnitType.HorseArcher => 18, UnitType.Cavalry => 12, _ => 0 };
 
     public static bool IsCav(UnitType t) => t is UnitType.Cavalry or UnitType.NomadLancer or UnitType.Cataphract or UnitType.HorseArcher;
     /// <summary>近战出手基础伤害(未计克制/护甲/冲锋)。</summary>

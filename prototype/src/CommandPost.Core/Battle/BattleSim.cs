@@ -303,6 +303,13 @@ public sealed class BattleSim
             {
                 case BStance.Attack:
                 {
+                    // 骑兵穿插:冲锋窗口(2.5s)一过就凿穿阵背而出,拉开再回身重冲——骑兵久缠必被步阵吞掉
+                    if (BArms.IsCav(u.Type) && u.State == BUnitState.Engaged && u.EngagedT > 3f && u.DisengageT <= 0f)
+                    {
+                        u.DisengageT = 5f;
+                        u.SetOrderDirect(Map.Clamp(u.Center + u.Facing * 80f), run: true, Map);
+                        break;
+                    }
                     // 视界内寻敌(林中难见);看不见但刚挨打 → 朝威胁来向扑
                     BattleUnit? tgt = null; float bd = float.MaxValue;
                     foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AliveCount > 0))
@@ -326,7 +333,7 @@ public sealed class BattleSim
                         if (foe != null) SkirmishStep(u, foe.Center, foe.Center.DistanceTo(u.Center));
                         break;
                     }
-                    goto case BStance.Standby;                              // 箭尽/近战部队:退避自保
+                    goto case BStance.Attack;                               // 箭尽:拔刀冲上去(游骑的第二把武器)
                 }
                 case BStance.Standby:
                 {
@@ -558,9 +565,11 @@ public sealed class BattleSim
             if (engaged && u.State != BUnitState.Engaged && BArms.IsCav(u.Type) && u.SpeedNow > 3.5f)
                 u.ChargeT = 2.5f;                                        // 冲锋窗口:带着冲量撞进去
             u.State = engaged ? BUnitState.Engaged : (u.Morale < 25f ? BUnitState.Wavering : BUnitState.Steady);
+            u.EngagedT = engaged ? u.EngagedT + Dt : 0f;
+            u.DisengageT = MathF.Max(0, u.DisengageT - Dt);
 
-            // 行军(接战则钉住,由士兵层厮杀)
-            if (!engaged && u.Path.Count > 0)
+            // 行军(接战则钉住,由士兵层厮杀;穿插中的骑队例外——凿穿阵背而出)
+            if ((!engaged || u.DisengageT > 0) && u.Path.Count > 0)
             {
                 float speed = BArms.SpeedOf(u.Type) * BattleMap.SpeedMult(Map.At(u.Center))
                             * (u.Running ? 1.5f : 1f) * (0.8f + 0.2f * u.Stamina / 100f);
@@ -748,6 +757,7 @@ public sealed class BattleSim
             var nearFoeUnit = NearestUnit(u.Center, u.Side == Side.Friend ? Side.Enemy : Side.Friend);
             bool contactZone = nearFoeUnit != null && nearFoeUnit.Center.DistanceTo(u.Center) < 45f;
             float seekR = contactZone ? 8f : reach + 0.6f;
+            if (u.DisengageT > 0) seekR = reach;                        // 穿插:边走边砍可及之敌,绝不停下追人
 
             for (int i = 0; i < u.Soldiers.Count; i++)
             {
@@ -785,7 +795,8 @@ public sealed class BattleSim
                             var fu = _byId[foe.UnitId];
                             float charge = u.ChargeT > 0 && BArms.IsCav(u.Type) ? 1.7f : 1f;
                             float dmg = BArms.MeleeBase * (float)Unit.TypeMatchup(u.Type, fu.Type) / BArms.ArmorOf(fu.Type)
-                                      * charge * dmgStam * (0.75f + (float)_rng.NextDouble() * 0.5f);
+                                      * charge * dmgStam * (0.75f + (float)_rng.NextDouble() * 0.5f)
+                                      * BattleMap.DefenseMult(Map.At(foe.Pos));   // 丘/林:守方减伤
                             foe.Hp -= dmg;
                             if (foe.Hp <= 0) { u.Kills++; fu.RecentLoss += 1f; }
                         }
@@ -806,7 +817,7 @@ public sealed class BattleSim
                         s.Ammo--;
                         var victim = tu.Soldiers[_rng.Next(tu.Soldiers.Count)];
                         float dist = victim.Pos.DistanceTo(s.Pos);
-                        float scatter = (2.5f + dist * 0.05f) * (u.Type == UnitType.HorseArcher ? 1.35f : 1f);   // 马上放箭散
+                        float scatter = (2.5f + dist * 0.05f) * (BArms.IsCav(u.Type) ? 1.35f : 1f);   // 马上放箭散
                         var aim = victim.Pos + new Vec2F(((float)_rng.NextDouble() * 2 - 1) * scatter,
                                                          ((float)_rng.NextDouble() * 2 - 1) * scatter);
                         Arrows.Add(new Arrow
@@ -862,7 +873,7 @@ public sealed class BattleSim
             if (hit is { } victim)
             {
                 var vu = _byId[victim.UnitId];
-                float dmg = ArrowDamage(a, vu);
+                float dmg = ArrowDamage(a, vu, Map);
                 victim.Hp -= dmg;
                 if (vu.Side != a.Side) { vu.LastThreatPos = a.Origin; vu.LastThreatT = Time; }   // 挨箭知来向
                 if (victim.Hp <= 0)
@@ -876,8 +887,8 @@ public sealed class BattleSim
         }
     }
 
-    /// <summary>一支箭对某部士兵的实际伤害:克制 × 护甲 × 盾墙迎箭(盾兵面向来箭方向 → 大幅减伤)。</summary>
-    public static float ArrowDamage(Arrow a, BattleUnit victim)
+    /// <summary>一支箭对某部士兵的实际伤害:克制 × 护甲 × 盾墙迎箭 × 地形减伤(丘/林)。</summary>
+    public static float ArrowDamage(Arrow a, BattleUnit victim, BattleMap map)
     {
         float block = 1f;
         if (victim.Type == UnitType.Shield && victim.Side != a.Side)
@@ -885,7 +896,8 @@ public sealed class BattleSim
             var toOrigin = (a.Origin - victim.Center).Normalized;
             if (toOrigin.Dot(victim.Facing) > 0.25f) block = 0.35f;   // 盾墙正对箭雨:挡下大半
         }
-        return a.RawDamage * (float)Unit.TypeMatchup(a.Shooter, victim.Type) / BArms.ArmorOf(victim.Type) * block;
+        return a.RawDamage * (float)Unit.TypeMatchup(a.Shooter, victim.Type) / BArms.ArmorOf(victim.Type)
+             * block * BattleMap.DefenseMult(map.At(a.Pos));
     }
 
     private void RemoveDead()
