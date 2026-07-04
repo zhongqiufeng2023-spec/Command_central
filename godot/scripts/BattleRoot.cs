@@ -108,6 +108,7 @@ public partial class BattleRoot : Node2D
 			case Key.Key1: SendStance(BStance.Attack); break;
 			case Key.Key2: SendStance(BStance.Hold); break;
 			case Key.Key3: SendStance(BStance.Standby); break;
+			case Key.Key4: SendStance(BStance.Skirmish); break;
 			case Key.Home: _cam = new Vector2(_sim.Map.WorldW / 2f, _sim.Map.WorldH / 2f); _zoom = 0.9f; break;
 			case Key.Escape: _selectedId = -1; break;
 		}
@@ -371,7 +372,7 @@ public partial class BattleRoot : Node2D
 		string mode = _realView ? "真实战场(对照,Tab切回)" : "沙盘·帅帐所知";
 		DrawText(new Vector2(16, 22), $"黑松岭之战 · {mode}   {BattleSim.FormatT(_sim.Time)} {clock}", 15, new Color("e8e0d0"));
 		DrawText(new Vector2(16, 42),
-			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 R探问 | 中键塘骑 Ctrl+左键插旗",
+			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 4游走 R探问 | 中键塘骑 Ctrl+左键插旗",
 			11, new Color("9aa0a8"));
 
 		if (!_realView && _selectedId >= 0 && _sim.Sandbox.Own.TryGetValue(_selectedId, out var mk))

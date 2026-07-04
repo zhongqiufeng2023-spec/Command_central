@@ -9,8 +9,9 @@ public enum BUnitState { Steady, Engaged, Wavering, Routing, Shattered, Destroye
 public enum BOrderKind { Hold, Move }
 
 /// <summary>部队姿态(玩家经令骑设定):没有命令时部队按姿态自主行事——
-/// 进攻=视界内自主接敌/挨打就扑;据守=钉在原地打还手;等待=避战自保,敌近则后撤。</summary>
-public enum BStance { Attack, Hold, Standby }
+/// 进攻=视界内自主接敌/挨打就扑;据守=钉在原地打还手;等待=避战自保,敌近则后撤;
+/// 游走=风筝战术(远程专用):保持射程带内放箭,敌近就拉开、敌远就跟上,箭尽转退避。</summary>
+public enum BStance { Attack, Hold, Standby, Skirmish }
 
 /// <summary>一名士兵:自己的位置与血量。部队兵力 = 存活士兵之和。</summary>
 public sealed class Soldier
@@ -106,6 +107,6 @@ public sealed class BattleUnit
 
     public string StanceCn => Stance switch
     {
-        BStance.Attack => "进攻", BStance.Standby => "等待", _ => "据守"
+        BStance.Attack => "进攻", BStance.Standby => "等待", BStance.Skirmish => "游走", _ => "据守"
     };
 }

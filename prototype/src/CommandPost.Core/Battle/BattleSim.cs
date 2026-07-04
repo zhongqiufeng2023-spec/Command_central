@@ -145,7 +145,7 @@ public sealed class BattleSim
     }
 
     public static string StanceCnOf(BStance s) => s switch
-    { BStance.Attack => "进攻", BStance.Standby => "等待", _ => "据守" };
+    { BStance.Attack => "进攻", BStance.Standby => "等待", BStance.Skirmish => "游走", _ => "据守" };
 
     /// <summary>派塘骑侦察某处(到点驻观 3 秒,回来把沿途所见并入沙盘)。</summary>
     public void DispatchScout(Vec2F dest)
@@ -254,13 +254,10 @@ public sealed class BattleSim
             if (known is { } kn)
             {
                 float dist = kn.pos.DistanceTo(e.Center);
-                if (BArms.Ranged(e.Type) && dist < 70f)
-                {
-                    var away = (e.Center - kn.pos).Normalized;              // 骑射放风筝:拉开到百米
-                    e.SetOrderDirect(Map.Clamp(e.Center + away * 60f), true, Map);
-                }
+                if (BArms.Ranged(e.Type) && e.Soldiers.Any(s => s.Ammo > 0))
+                    SkirmishStep(e, kn.pos, dist);                          // 骑射风筝:射程带内游走放箭
                 else if (dist > 14f)
-                    e.SetOrderDirect(kn.pos, dist < 120f && BArms.IsCav(e.Type), Map);
+                    e.SetOrderDirect(kn.pos, dist < 120f && BArms.IsCav(e.Type), Map);   // 箭尽/近战:压上肉搏
             }
             else if (e.State == BUnitState.Steady && e.Path.Count == 0)
                 e.SetOrderDirect(Map.Clamp(e.Center + new Vec2F(-90f, 0)), false, Map);   // 无敌情:徐进压上
@@ -295,6 +292,17 @@ public sealed class BattleSim
                         u.SetOrderDirect(u.LastThreatPos, run: true, Map);
                     break;
                 }
+                case BStance.Skirmish:
+                {
+                    // 游走(风筝):远程且有矢 → 射程带内保持距离放箭
+                    if (BArms.Ranged(u.Type) && u.Soldiers.Any(s => s.Ammo > 0))
+                    {
+                        var foe = NearestUnit(u.Center, Side.Enemy);
+                        if (foe != null) SkirmishStep(u, foe.Center, foe.Center.DistanceTo(u.Center));
+                        break;
+                    }
+                    goto case BStance.Standby;                              // 箭尽/近战部队:退避自保
+                }
                 case BStance.Standby:
                 {
                     // 避战自保:敌近或挨打 → 反向拉开 70m
@@ -308,6 +316,17 @@ public sealed class BattleSim
                 // Hold(据守):钉在原地——近战自动还手,弩手自动齐射
             }
         }
+    }
+
+    /// <summary>风筝一步:敌进我退(拉回射程带),敌远我跟(贴到射程),带内站定放箭。敌我共用。</summary>
+    private void SkirmishStep(BattleUnit u, Vec2F foePos, float dist)
+    {
+        float range = BArms.RangeOf(u.Type);
+        if (dist < range * 0.45f)
+            u.SetOrderDirect(Map.Clamp(u.Center + (u.Center - foePos).Normalized * (range * 0.7f - dist + 20f)), run: true, Map);
+        else if (dist > range * 0.9f)
+            u.SetOrderDirect(foePos, run: BArms.IsCav(u.Type), Map);
+        else if (u.Path.Count > 0) { u.Path.Clear(); u.Order = BOrderKind.Hold; }
     }
 
     // ====================================================================
@@ -547,7 +566,12 @@ public sealed class BattleSim
                     u.LastThreatPos = nearestFoe.Center; u.LastThreatT = Time;   // 接刃即知威胁所在
                 }
             }
-            else u.SpeedNow = 0;
+            else
+            {
+                u.SpeedNow = 0;
+                if (Time - u.LastThreatT < 6f)                                   // 静立受矢:转身迎盾
+                    u.Facing = (u.LastThreatPos - u.Center).Normalized;
+            }
 
             // 体力
             if (engaged) u.Stamina -= 2f * Dt;
@@ -757,7 +781,7 @@ public sealed class BattleSim
                         s.Ammo--;
                         var victim = tu.Soldiers[_rng.Next(tu.Soldiers.Count)];
                         float dist = victim.Pos.DistanceTo(s.Pos);
-                        float scatter = 2.5f + dist * 0.05f;
+                        float scatter = (2.5f + dist * 0.05f) * (u.Type == UnitType.HorseArcher ? 1.35f : 1f);   // 马上放箭散
                         var aim = victim.Pos + new Vec2F(((float)_rng.NextDouble() * 2 - 1) * scatter,
                                                          ((float)_rng.NextDouble() * 2 - 1) * scatter);
                         Arrows.Add(new Arrow
@@ -813,7 +837,7 @@ public sealed class BattleSim
             if (hit is { } victim)
             {
                 var vu = _byId[victim.UnitId];
-                float dmg = a.RawDamage * (float)Unit.TypeMatchup(a.Shooter, vu.Type) / BArms.ArmorOf(vu.Type);
+                float dmg = ArrowDamage(a, vu);
                 victim.Hp -= dmg;
                 if (vu.Side != a.Side) { vu.LastThreatPos = a.Origin; vu.LastThreatT = Time; }   // 挨箭知来向
                 if (victim.Hp <= 0)
@@ -825,6 +849,18 @@ public sealed class BattleSim
             }
             Arrows.RemoveAt(i);
         }
+    }
+
+    /// <summary>一支箭对某部士兵的实际伤害:克制 × 护甲 × 盾墙迎箭(盾兵面向来箭方向 → 大幅减伤)。</summary>
+    public static float ArrowDamage(Arrow a, BattleUnit victim)
+    {
+        float block = 1f;
+        if (victim.Type == UnitType.Shield && victim.Side != a.Side)
+        {
+            var toOrigin = (a.Origin - victim.Center).Normalized;
+            if (toOrigin.Dot(victim.Facing) > 0.25f) block = 0.35f;   // 盾墙正对箭雨:挡下大半
+        }
+        return a.RawDamage * (float)Unit.TypeMatchup(a.Shooter, victim.Type) / BArms.ArmorOf(victim.Type) * block;
     }
 
     private void RemoveDead()

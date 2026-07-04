@@ -198,11 +198,12 @@ public static class BattlePath
 /// <summary>兵种战斗参数表(逐兵层)。克制沿用 Unit.TypeMatchup;数值实验档,待调。</summary>
 public static class BArms
 {
-    /// <summary>行走速度 m/s(奔跑 ×1.5)。</summary>
+    /// <summary>行走速度 m/s(奔跑 ×1.5)。轻骑略快于骑射:风筝有解(游骑能追上)。</summary>
     public static float SpeedOf(UnitType t) => t switch
     {
-        UnitType.HorseArcher => 7f,
-        UnitType.Cavalry or UnitType.NomadLancer => 6.5f,
+        UnitType.Cavalry => 6.8f,
+        UnitType.HorseArcher => 6.6f,
+        UnitType.NomadLancer => 6.5f,
         UnitType.Cataphract => 5f,
         UnitType.TribalFoot => 1.8f,
         _ => 1.6f
@@ -217,11 +218,12 @@ public static class BArms
     };
 
     public static bool Ranged(UnitType t) => t is UnitType.Bow or UnitType.HorseArcher;
-    /// <summary>射程(米)。弩(Bow)远而慢装,骑射近而快装。</summary>
+    /// <summary>射程(米)。弩(Bow)远而慢装——骑射(120)被弩(160)反制;骑射近而快装但箭少、马上放箭散布大。</summary>
     public static float RangeOf(UnitType t) => t switch { UnitType.Bow => 160f, UnitType.HorseArcher => 120f, _ => 0f };
-    public static float RangedDamage(UnitType t) => t == UnitType.Bow ? 58f : 42f;
+    public static float RangedDamage(UnitType t) => t == UnitType.Bow ? 58f : 34f;
     public static (float min, float max) ReloadOf(UnitType t) => t == UnitType.Bow ? (8f, 11f) : (5f, 7.5f);
-    public static int AmmoOf(UnitType t) => t == UnitType.Bow ? 20 : 25;
+    /// <summary>随队箭矢:骑射箭壶浅(18),射空必须近身肉搏——风筝有尽头。</summary>
+    public static int AmmoOf(UnitType t) => t == UnitType.Bow ? 22 : 18;
 
     public static bool IsCav(UnitType t) => t is UnitType.Cavalry or UnitType.NomadLancer or UnitType.Cataphract or UnitType.HorseArcher;
     /// <summary>近战出手基础伤害(未计克制/护甲/冲锋)。</summary>

@@ -22,13 +22,13 @@ public static class BattleScenario
         sim.AddUnit(Side.Friend, UnitType.Cavalry,    "游骑",   new Commander("秦锐",   Personality.Aggressive, 0.70), new Vec2F(170, 420), 160);
         sim.AddUnit(Side.Friend, UnitType.Cataphract, "铁骑",   new Commander("呼延豹", Personality.Aggressive, 0.72), new Vec2F(170, 120), 180);
 
-        // —— 草原(东,AI)——
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("阿史那", Personality.Cunning,    0.68), new Vec2F(810, 160), 200, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("咄陆",   Personality.Cunning,    0.68), new Vec2F(810, 390), 200, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("俟斤",   Personality.Aggressive, 0.68), new Vec2F(860, 260), 220, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.TribalFoot,  "部众", new Commander("杂胡",   Personality.Steady,     0.68), new Vec2F(890, 300), 240, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.68), new Vec2F(860, 110), 230, ai: true);
-        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.68), new Vec2F(890, 440), 180, ai: true);
+        // —— 草原(东,AI;劫掠偏师,兵力略逊——但骑射风筝仍要用脑子解)——
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("阿史那", Personality.Cunning,    0.68), new Vec2F(810, 160), 170, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("咄陆",   Personality.Cunning,    0.68), new Vec2F(810, 390), 170, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("俟斤",   Personality.Aggressive, 0.68), new Vec2F(860, 260), 200, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.TribalFoot,  "部众", new Commander("杂胡",   Personality.Steady,     0.68), new Vec2F(890, 300), 220, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.68), new Vec2F(860, 110), 200, ai: true);
+        sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.68), new Vec2F(890, 440), 150, ai: true);
 
         sim.Feed("帅帐军情:虏骑现于黑松岭以东,兵力不详。各部就位,听令而动。");
         return sim;

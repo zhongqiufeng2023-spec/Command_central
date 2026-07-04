@@ -105,6 +105,39 @@ public class BattleSimTests
     }
 
     [Fact]
+    public void SkirmishStance_KitesAndKeepsShooting()
+    {
+        var sim = Sim(40, 10);
+        var bow = sim.AddUnit(Side.Friend, UnitType.Bow, "弩", new Commander("甲", Personality.Steady), new Vec2F(300, 80), 40);
+        bow.Stance = BStance.Skirmish;                                 // 游走:风筝
+        var foe = sim.AddUnit(Side.Enemy, UnitType.TribalFoot, "众", new Commander("乙", Personality.Steady), new Vec2F(380, 80), 60);
+        foe.SetOrderDirect(new Vec2F(60, 80), run: true, sim.Map);     // 直扑弩队
+
+        float minDist = float.MaxValue;
+        for (int i = 0; i < 600 && !sim.Over; i++)
+        {
+            sim.Tick();
+            minDist = System.MathF.Min(minDist, bow.Center.DistanceTo(foe.Center));
+        }
+        Assert.True(minDist > 25f, $"游走应保持距离,最近却到 {minDist:0}m");
+        Assert.True(foe.AliveCount < 60, "游走途中应持续放箭杀伤");
+    }
+
+    [Fact]
+    public void ShieldWall_FacingArchers_BlocksMostArrowDamage()
+    {
+        var sim = Sim();
+        var sh = sim.AddUnit(Side.Enemy, UnitType.Shield, "盾", new Commander("乙", Personality.Steady), new Vec2F(150, 80), 10);
+        var arrow = new Arrow { Origin = new Vec2F(60, 80), RawDamage = 50f, Shooter = UnitType.Bow, Side = Side.Friend };
+
+        sh.Facing = new Vec2F(-1, 0);                                  // 盾墙迎着弓手
+        float front = BattleSim.ArrowDamage(arrow, sh);
+        sh.Facing = new Vec2F(1, 0);                                   // 背对
+        float back = BattleSim.ArrowDamage(arrow, sh);
+        Assert.True(front < back * 0.5f, $"迎盾应大幅减伤:迎面{front:0.0} vs 背对{back:0.0}");
+    }
+
+    [Fact]
     public void AutoReport_UpdatesSandbox_WithAgedInfo()
     {
         var sim = Sim(40, 10);
