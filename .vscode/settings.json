@@ -1,0 +1,10 @@
+{
+  "dotnet.defaultSolution": "CommandTent.sln",
+  "omnisharp.useModernNet": true,
+  "dotnet.server.useOmnisharp": false,
+  "files.exclude": {
+    "**/.godot": true,
+    "**/bin": true,
+    "**/obj": true
+  }
+}
