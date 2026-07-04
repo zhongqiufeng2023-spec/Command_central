@@ -768,8 +768,7 @@ public sealed class BattleSim
                 if (routing)
                 {
                     float edgeX = u.Side == Side.Friend ? 4f : Map.WorldW - 4f;
-                    var dir = (new Vec2F(edgeX, s.Pos.Y) - s.Pos).Normalized;
-                    s.Pos += dir * BArms.SpeedOf(u.Type) * 1.5f * BattleMap.SpeedMult(Map.At(s.Pos)) * Dt;
+                    MoveSoldierTo(s, new Vec2F(edgeX, s.Pos.Y), BArms.SpeedOf(u.Type) * 1.5f);
                     continue;                                          // 溃兵只顾逃命(仍可被截杀)
                 }
 
@@ -802,8 +801,7 @@ public sealed class BattleSim
                         }
                     }
                     else
-                        s.Pos += (foe.Pos - s.Pos).Normalized
-                               * BArms.SpeedOf(u.Type) * 1.4f * BattleMap.SpeedMult(Map.At(s.Pos)) * stamF * Dt;
+                        MoveSoldierTo(s, foe.Pos, BArms.SpeedOf(u.Type) * 1.4f * stamF);
                     continue;
                 }
 
@@ -834,13 +832,9 @@ public sealed class BattleSim
                 var slot = u.SlotWorld(i);
                 float sd = s.Pos.DistanceTo(slot);
                 if (sd > 0.25f)
-                {
-                    float speed = BArms.SpeedOf(u.Type) * BattleMap.SpeedMult(Map.At(s.Pos))
-                                * ((u.Running || sd > 8f) ? 1.5f : 1f) * stamF;
-                    s.Pos += (slot - s.Pos).Normalized * MathF.Min(speed * Dt, sd);
-                }
+                    MoveSoldierTo(s, slot, BArms.SpeedOf(u.Type) * ((u.Running || sd > 8f) ? 1.5f : 1f) * stamF);
 
-                // 拥挤分离(轻推)
+                // 拥挤分离(轻推;不许把人挤进河里)
                 var push = new Vec2F(0, 0);
                 ForNeighbors(s.Pos, 0.8f, o =>
                 {
@@ -849,9 +843,36 @@ public sealed class BattleSim
                     float l = d.Length;
                     if (l < 0.8f && l > 0.001f) push += d * (1f / l) * (0.8f - l);
                 });
-                s.Pos += push * (2.2f * Dt);
+                var pushed = s.Pos + push * (2.2f * Dt);
+                if (BattleMap.Passable(Map.At(pushed))) s.Pos = pushed;
             }
         }
+    }
+
+    /// <summary>士兵安全位移:绝不踏入不可通行地形(河)。直走被挡就沿岸滑动;
+    /// 已陷河中(异常兜底)则径直自救上岸——根治「士兵冻死在河里、敌军围着打不完」。</summary>
+    private void MoveSoldierTo(Soldier s, Vec2F target, float speedBase)
+    {
+        if (!BattleMap.Passable(Map.At(s.Pos)))
+        {
+            var shore = Map.NearestPassable(s.Pos);                     // 自救:河中不吃地形减速
+            var d0 = shore - s.Pos;
+            float l0 = d0.Length;
+            if (l0 > 0.01f) s.Pos += d0 * (MathF.Min(speedBase * Dt, l0) / l0);
+            return;
+        }
+
+        var d = target - s.Pos;
+        float dist = d.Length;
+        if (dist < 0.01f) return;
+        float step = MathF.Min(speedBase * BattleMap.SpeedMult(Map.At(s.Pos)) * Dt, dist);
+        var next = s.Pos + d * (step / dist);
+        if (BattleMap.Passable(Map.At(next))) { s.Pos = next; return; }
+
+        var slideX = new Vec2F(next.X, s.Pos.Y);                        // 沿岸滑动(保留一个轴的进度)
+        if (BattleMap.Passable(Map.At(slideX))) { s.Pos = slideX; return; }
+        var slideY = new Vec2F(s.Pos.X, next.Y);
+        if (BattleMap.Passable(Map.At(slideY))) s.Pos = slideY;
     }
 
     private void UpdateArrows()

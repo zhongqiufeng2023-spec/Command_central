@@ -192,6 +192,34 @@ public class BattleSimTests
     }
 
     [Fact]
+    public void Soldiers_NeverEndUpFrozenInRiver()
+    {
+        // 纵向河带拦路(仅一处渡滩):全队奉令过河,任何士兵都不得留在河瓦片里
+        var map = new BattleMap(30, 10);
+        map.Paint(10, 0, 11, 9, BTerrain.River);
+        map.Paint(10, 4, 11, 5, BTerrain.Ford);
+        var sim = new BattleSim(map, new Rng(7)) { HqPos = new Vec2F(24, 80) };
+        var u = sim.AddUnit(Side.Friend, UnitType.Spear, "枪", new Commander("甲", Personality.Steady), new Vec2F(300, 80), 40);
+        u.SetOrderDirect(new Vec2F(60, 80), run: true, sim.Map);
+
+        for (int i = 0; i < 1500; i++) sim.Tick();
+        Assert.DoesNotContain(u.Soldiers, s => sim.Map.At(s.Pos) == BTerrain.River);
+    }
+
+    [Fact]
+    public void Soldier_StrandedInRiver_SelfRescues()
+    {
+        var map = new BattleMap(30, 10);
+        map.Paint(10, 0, 11, 9, BTerrain.River);
+        var sim = new BattleSim(map, new Rng(7)) { HqPos = new Vec2F(24, 80) };
+        var u = sim.AddUnit(Side.Friend, UnitType.Spear, "枪", new Commander("甲", Personality.Steady), new Vec2F(300, 80), 10);
+        u.Soldiers[0].Pos = new Vec2F(176, 80);                        // 人为丢进河心
+
+        for (int i = 0; i < 300; i++) sim.Tick();
+        Assert.True(BattleMap.Passable(sim.Map.At(u.Soldiers[0].Pos)), "河中士兵应自救上岸,不许冻死");
+    }
+
+    [Fact]
     public void AutoReport_UpdatesSandbox_WithAgedInfo()
     {
         var sim = Sim(40, 10);
