@@ -28,6 +28,28 @@ public partial class OverworldRoot : Node2D
 	private Font _font = null!;
 	private readonly PauseOverlay _menu = new();
 
+	// —— 事件层:谒见周帅 / 虏帐章末 / 敌情预警 ——
+	private static readonly Vector2 HqCamp = new(19 * TS, 64 * TS);       // 帅帐(周崇)
+	private static readonly Vector2 FoeCamp = new(184 * TS, 62 * TS);     // 虏帐
+	private bool _letterOpen;                                             // 谒见军令卷轴
+	private bool _ending;                                                 // 章末结算
+	private bool _warnedSighting;
+	private bool NearHq => _pos.DistanceTo(HqCamp) < 100f;
+
+	private static readonly string[] Shichen = { "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥" };
+	private static float DayHour => GameState.I.CampaignHours % 24f;
+	/// <summary>入夜程度 0..1(酉末起、卯初散)。</summary>
+	private static float NightFactor
+	{
+		get
+		{
+			float h = DayHour;
+			return h < 4f ? 1f : h < 6f ? (6f - h) / 2f : h < 18f ? 0f : h < 21f ? (h - 18f) / 3f : 1f;
+		}
+	}
+	private static string CalendarCn =>
+		$"第{(int)(GameState.I.CampaignHours / 24f) + 1}日 {Shichen[((int)DayHour + 1) / 2 % 12]}时";
+
 	public override void _Ready()
 	{
 		TextureFilter = TextureFilterEnum.Nearest;
@@ -96,7 +118,7 @@ public partial class OverworldRoot : Node2D
 	public override void _Process(double delta)
 	{
 		_t0 += delta; _bannerAge += delta;
-		if (_menu.Open) { QueueRedraw(); return; }
+		if (_menu.Open || _letterOpen || _ending) { QueueRedraw(); return; }
 		float dt = (float)delta;
 
 		var dir = Vector2.Zero;
@@ -114,7 +136,8 @@ public partial class OverworldRoot : Node2D
 		_moving = dir != Vector2.Zero;
 		if (_moving)
 		{
-			float speed = 130f * SpeedMult(At(_pos));
+			GameState.I.CampaignHours += dt * 1.2f;                       // 行军走表(夜行更慢,见下)
+			float speed = 130f * SpeedMult(At(_pos)) * (NightFactor > 0.6f ? 0.75f : 1f);
 			var next = _pos + dir.Normalized() * speed * dt;
 			next.X = Math.Clamp(next.X, 10, TW * TS - 10); next.Y = Math.Clamp(next.Y, 10, TH * TS - 10);
 			if (Passable(At(next))) _pos = next;
@@ -128,10 +151,24 @@ public partial class OverworldRoot : Node2D
 			if (Mathf.Abs(dir.X) > 0.01f) _faceLeft = dir.X < 0;
 		}
 
+		// —— 事件:虏帐(先破当面之虏方可近前;破敌后抵达=章末)——
+		if (_pos.DistanceTo(FoeCamp) < 120f)
+		{
+			if (GameState.I.EnemyDefeated) { _ending = true; _moveTarget = null; }
+			else
+			{
+				_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
+				_banner = "虏帐守备森严,游骑四出——先破当面之虏,再图斯地。"; _bannerAge = 0;
+			}
+		}
+
 		// —— 当面之敌:扼守黑松岭东缘;你进抵岭一线(靠近)即出而接敌 ——
 		if (!GameState.I.EnemyDefeated)
 		{
 			var toMe = _pos - _enemy;
+			if (toMe.Length() < 520f && !_warnedSighting)
+			{ _warnedSighting = true; _banner = "塘报:虏骑出汛,正向我逼来!(C=扎营备战,可先布阵)"; _bannerAge = 0; }
+			else if (toMe.Length() > 700f) _warnedSighting = false;
 			if (toMe.Length() < 340f)
 				_enemy += toMe.Normalized() * 92f * dt;                       // 出汛接敌
 			else if ((_enemy - EnemyPost).Length() > 24f)
@@ -155,6 +192,17 @@ public partial class OverworldRoot : Node2D
 	{
 		if (e is InputEventKey { Pressed: true, Echo: false } k)
 		{
+			if (_ending)
+			{
+				if (k.Keycode is Key.Enter or Key.KpEnter)
+				{ SyncState(); GameState.I.SaveRun(); GameState.Go(this, "res://Title.tscn"); }
+				return;
+			}
+			if (_letterOpen)
+			{
+				if (k.Keycode is Key.E or Key.Escape or Key.Enter or Key.KpEnter) _letterOpen = false;
+				return;
+			}
 			switch (_menu.HandleKey(k, out bool consumed))
 			{
 				case PauseOverlay.Act.SaveToTitle:
@@ -169,8 +217,9 @@ public partial class OverworldRoot : Node2D
 				GameState.I.CampOnly = true; GameState.I.Battle = null;
 				GameState.Go(this, "res://Tent.tscn");
 			}
+			else if (k.Keycode == Key.E && NearHq) _letterOpen = true;
 		}
-		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open)
+		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
 			_moveTarget = mb.Position - CamOffset();
 	}
 
@@ -245,10 +294,17 @@ public partial class OverworldRoot : Node2D
 		if (_moveTarget is { } t2)
 			DrawArc(t2, 7f, 0, Mathf.Tau, 16, new Color(1, 1, 1, 0.5f), 1.5f);
 
+		if (NearHq)
+			DrawLabel(HqCamp + new Vector2(0, 40), "E=谒见周帅", new Color("f2e6c8"));
+
 		DrawSetTransform(Vector2.Zero, 0, Vector2.One);
 
+		// —— 昼夜:夜行野暗(酉末入夜、卯初天明)——
+		if (NightFactor > 0.01f)
+			DrawRect(new Rect2(0, 0, 1120, 760), new Color(0.03f, 0.05f, 0.13f, 0.42f * NightFactor), true);
+
 		// —— HUD 层 ——
-		DrawString(_font, new Vector2(14, 24), $"大酆边野 · 行军 · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+		DrawString(_font, new Vector2(14, 24), $"大酆边野 · {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 		DrawString(_font, new Vector2(14, 44),
 			GameState.I.EnemyDefeated
 				? "虏骑已绝迹于野。C=扎营入帐 · WASD/点击=行军 · Esc=菜单"
@@ -259,7 +315,62 @@ public partial class OverworldRoot : Node2D
 		if (_banner != "" && _bannerAge < 4)
 			DrawString(_font, new Vector2(360, 90), _banner, HorizontalAlignment.Left, -1, 14, new Color("f2e6c8"));
 
+		DrawLetter();
+		DrawEnding();
 		_menu.Draw(this, _font);
+	}
+
+	/// <summary>谒见周帅:中军令卷轴(破敌前=军令;破敌后=嘉勉与新命)。</summary>
+	private void DrawLetter()
+	{
+		if (!_letterOpen) return;
+		DrawRect(new Rect2(0, 0, 1120, 760), new Color(0, 0, 0, 0.6f), true);
+		float w = 640, h = 420;
+		var box = new Rect2((1120 - w) / 2, (760 - h) / 2, w, h);
+		DrawRect(box, new Color(0.16f, 0.13f, 0.09f, 0.98f), true);
+		DrawRect(box, new Color("d9b34a"), false, 2f);
+		float x = box.Position.X + 40, y = box.Position.Y + 48;
+
+		void L(string s, int size, string col) { DrawString(_font, new Vector2(x, y), s, HorizontalAlignment.Left, (int)w - 80, size, new Color(col)); y += size + 10; }
+
+		if (!GameState.I.EnemyDefeated)
+		{
+			L("征虏中军令", 20, "e6c25c"); y += 6;
+			L("周崇谕前锋总兵官:", 14, "d8d2c4");
+			L("虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 14, "c8c2b4");
+			L("命尔部即日东进,进抵岭一线;虏情务须侦明,军书具报,", 14, "c8c2b4");
+			L("相机破之。朝廷候捷,毋纵毋怠。", 14, "c8c2b4"); y += 8;
+			L("——行军中扎营(C)可入中军帐;战起时先布阵再擂鼓。", 12, "9aa0a8");
+		}
+		else
+		{
+			L("周帅嘉勉", 20, "e6c25c"); y += 6;
+			L($"「黑松岭之捷,行营已录。今主帅信任 {GameState.I.Trust}。」", 14, "d8d2c4");
+			if (GameState.I.LastVerdict is { } v) L($"上战裁断:「{v.VerdictCn}」", 14, "c8c2b4");
+			L("「虏酋新败,巢帐空虚——尔部乘胜东捣虏帐,毕其功于一役!」", 14, "c8c2b4"); y += 8;
+			L("——东进至虏帐,即结此章。", 12, "9aa0a8");
+		}
+		DrawString(_font, new Vector2(x, box.End.Y - 30), "E / 回车 · 领命", HorizontalAlignment.Left, -1, 13, new Color("e6c25c"));
+	}
+
+	/// <summary>章末:兵抵虏帐,第一章完。</summary>
+	private void DrawEnding()
+	{
+		if (!_ending) return;
+		DrawRect(new Rect2(0, 0, 1120, 760), new Color(0, 0, 0, 0.78f), true);
+		float w = 560, h = 360;
+		var box = new Rect2((1120 - w) / 2, (760 - h) / 2, w, h);
+		DrawRect(box, new Color(0.10f, 0.09f, 0.07f, 0.98f), true);
+		DrawRect(box, new Color("d9b34a"), false, 2f);
+		float y = box.Position.Y + 64;
+		DrawString(_font, new Vector2(0, y), "第一章 · 黑松岭 —— 完", HorizontalAlignment.Center, 1120, 26, new Color("e6c25c")); y += 44;
+		DrawString(_font, new Vector2(0, y), "虏帐已空,残部远遁漠北。边野暂靖。", HorizontalAlignment.Center, 1120, 14, new Color("c8c2b4")); y += 30;
+		DrawString(_font, new Vector2(0, y), $"用时 {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Center, 1120, 14, new Color("d8d2c4")); y += 26;
+		if (GameState.I.LastVerdict is { } v)
+			DrawString(_font, new Vector2(0, y), $"行营终评:「{v.VerdictCn}」", HorizontalAlignment.Center, 1120, 14, new Color("f2e6c8"));
+		y += 40;
+		DrawString(_font, new Vector2(0, y), "功成之处,枯骨盈野。", HorizontalAlignment.Center, 1120, 13, new Color("8a8474")); y += 40;
+		DrawString(_font, new Vector2(0, y), "回车 · 回主菜单", HorizontalAlignment.Center, 1120, 14, new Color("e6c25c"));
 	}
 
 	private void DrawMinimap()

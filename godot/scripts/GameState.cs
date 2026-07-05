@@ -25,6 +25,9 @@ public partial class GameState : Node
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
 
+	/// <summary>行军历:出征以来的时辰数(行军才走表;第一日辰时出兵)。</summary>
+	public float CampaignHours = 8f;
+
 	/// <summary>主帅信任(跨战役累积,0..100 基线 50)——每战的行营裁断向它结转。</summary>
 	public int Trust = 50;
 	/// <summary>上一战的行营裁断(帐内/大地图可回看);null=尚无战绩。</summary>
@@ -67,6 +70,7 @@ public partial class GameState : Node
 		PartyPos = new Vector2(55 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
 		EnemyDefeated = false; Trust = 50; LastVerdict = null;
+		CampaignHours = 8f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
 	}
 
@@ -80,6 +84,7 @@ public partial class GameState : Node
 			["ex"] = EnemyPos.X, ["ey"] = EnemyPos.Y,
 			["defeated"] = EnemyDefeated, ["trust"] = Trust,
 			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
+			["hours"] = CampaignHours,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -101,6 +106,7 @@ public partial class GameState : Node
 		Trust = d["trust"].AsInt32();
 		EasySandboxVision = d["easy"].AsBool();
 		_battleSeed = d["seed"].AsInt32();
+		CampaignHours = d.ContainsKey("hours") ? d["hours"].AsSingle() : 8f;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;
