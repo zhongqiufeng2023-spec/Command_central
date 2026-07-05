@@ -93,6 +93,7 @@ public sealed partial class BattleSim
         UpdateEnemyAi();
         UpdateStances();     // 我方各部按姿态自主行事(进攻扑敌/等待避战)
         UpdateRiders();
+        UpdateMission();
         AutoReports();
         UpdateUnits();
         RebuildHash();
@@ -139,6 +140,7 @@ public sealed partial class BattleSim
         Winner = friendStands ? Side.Friend : enemyStands ? Side.Enemy : null;
         Alerts.Add(new Alert((int)Time, Winner == Side.Friend ? "虏骑溃矣!战场是我们的。"
                                        : Winner == Side.Enemy ? "全军溃散……败局已定。" : "两败俱伤,战场沉寂。", true));
+        Mission?.Finish(this);
     }
 
     // ====================================================================

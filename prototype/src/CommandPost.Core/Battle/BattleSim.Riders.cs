@@ -44,6 +44,8 @@ public sealed partial class BattleSim
 
             if (r.Phase == RiderPhase.Outbound)
             {
+                if (r is { Kind: RiderKind.Report, ToHq: true })
+                { r.Delivered = true; DeliverHqReport(r); continue; }
                 switch (r.Kind)
                 {
                     case RiderKind.Order when ById(r.TargetUnitId) is { } u && u.AliveCount > 0:

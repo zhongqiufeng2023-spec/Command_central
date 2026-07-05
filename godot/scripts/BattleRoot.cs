@@ -107,6 +107,14 @@ public partial class BattleRoot : Node2D
 				if (_selectedId >= 0 && !_sim.Over)
 				{ _sim.RequestStatus(_selectedId); _banner = "令骑已出:探问该部近况……"; _bannerAge = 0; }
 				break;
+			case Key.B:
+				if (!_sim.Over && _sim.Mission != null)
+				{
+					_sim.SendHqReport();
+					_banner = $"军书发出:具报敌情 {_sim.Sandbox.Enemy.Count} 条——回执未至前,别当它送到了";
+					_bannerAge = 0;
+				}
+				break;
 			case Key.Key1: SendStance(BStance.Attack); break;
 			case Key.Key2: SendStance(BStance.Hold); break;
 			case Key.Key3: SendStance(BStance.Standby); break;

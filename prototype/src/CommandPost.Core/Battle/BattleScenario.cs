@@ -30,6 +30,7 @@ public static class BattleScenario
         sim.AddUnit(Side.Enemy, UnitType.NomadLancer, "突骑", new Commander("拔野古", Personality.Aggressive, 0.55), new Vec2F(860, 110), 180, ai: true);
         sim.AddUnit(Side.Enemy, UnitType.HorseArcher, "骑射", new Commander("同罗",   Personality.Cunning,    0.55), new Vec2F(895, 400), 130, ai: true);
 
+        sim.Mission = BattleMissions.BlackPine();
         sim.Feed("帅帐军情:虏骑现于黑松岭以东,兵力不详。各部就位,听令而动。");
         return sim;
     }

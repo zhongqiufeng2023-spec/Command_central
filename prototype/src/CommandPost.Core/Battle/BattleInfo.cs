@@ -36,6 +36,8 @@ public sealed class Rider
     public Dictionary<int, EnemySighting> Sightings = new();
     public OwnStatus? ReportOwn;                  // 携带的我部近况
     public bool Lost, Delivered, OverdueAlerted;
+    /// <summary>军书上行骑手:目的地是行营(西缘出图),不回帐。</summary>
+    public bool ToHq;
     public float Depart, ExpectedBack;
     /// <summary>沙盘估算行程用:出发时的计划路线(非真实位置——被截杀了你也不知道)。</summary>
     public List<Vec2F> EstPath = new();

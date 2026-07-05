@@ -12,8 +12,9 @@ public partial class BattleRoot
 		string mode = _realView ? "真实战场(对照,Tab切回)" : "沙盘·帅帐所知";
 		DrawText(new Vector2(16, 22), $"黑松岭之战 · {mode}   {BattleSim.FormatT(_sim.Time)} {clock}", 15, new Color("e8e0d0"));
 		DrawText(new Vector2(16, 42),
-			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 4游走 R探问 | 中键塘骑 Ctrl+左插旗 | Esc回帐 F1低难度",
+			"空格暂停 ±调速 Tab视图 滚轮缩放 WASD平移 | 左键选部 右键行军(Shift疾) 1进攻 2据守 3等待 4游走 R探问 B发军书 | 中键塘骑 Ctrl+左插旗 | Esc回帐 F1低难度",
 			11, new Color("9aa0a8"));
+		DrawMissionBoard();
 
 		if (!_realView && _selectedId >= 0 && _sim.Sandbox.Own.TryGetValue(_selectedId, out var mk))
 		{
@@ -23,6 +24,32 @@ public partial class BattleRoot
 			DrawText(new Vector2(880, 110), $"所报状态 {mk.StateCn}", 12, new Color("d8d2c4"));
 			DrawText(new Vector2(880, 128), $"报于 {(int)(_sim.Time - mk.T)}s 前", 12, new Color("c8bfa8"));
 			DrawText(new Vector2(880, 150), "右键=遣令骑传令", 11, new Color("9aa0a8"));
+		}
+	}
+
+	/// <summary>军令牌:行营任务目标一览。战中只按「你所知」显示——真相类目标战毕才揭晓。</summary>
+	private void DrawMissionBoard()
+	{
+		if (_sim.Mission is not { } m || _realView) return;
+		float x = 880, y = 190;
+		DrawText(new Vector2(x, y), $"军令牌 · {m.Title}", 13, new Color("e6c25c")); y += 8;
+		foreach (var o in m.Objectives)
+		{
+			y += 19;
+			string mark; Color c;
+			if (!o.Active) { mark = "◇"; c = new Color("6f6a5e"); }
+			else switch (o.State)
+			{
+				case BObjectiveState.Done: mark = "✓"; c = new Color("8fc97a"); break;
+				case BObjectiveState.Failed: mark = "✗"; c = new Color("d97a6a"); break;
+				case BObjectiveState.Partial: mark = "◐"; c = new Color("e6c25c"); break;
+				default:
+					mark = "・";
+					c = o.Kind is BObjectiveKind.DefeatEnemy or BObjectiveKind.PreserveArmy
+						? new Color("9aa0a8") : new Color("d8d2c4");   // 真相类:战毕方知
+					break;
+			}
+			DrawText(new Vector2(x, y), $"{mark} {o.Cn}{(o.Active ? "" : "〔令未至〕")}", 12, c);
 		}
 	}
 
@@ -51,29 +78,46 @@ public partial class BattleRoot
 	{
 		if (!_sim.Over) return;
 		DrawRect(new Rect2(0, 0, 1120, 760), new Color(0, 0, 0, 0.55f), true);
-		float w = 560, h = 420;
+		float w = 620, h = 640;
 		var box = new Rect2((1120 - w) / 2, (760 - h) / 2, w, h);
 		DrawRect(box, new Color(0.10f, 0.09f, 0.07f, 0.97f), true);
 		DrawRect(box, new Color("d9b34a"), false, 2f);
 
-		float x = box.Position.X + 30, y = box.Position.Y + 40;
-		string title = _sim.Winner == Side.Friend ? "捷!虏骑溃走" : _sim.Winner == Side.Enemy ? "败绩……全军溃散" : "两败俱伤";
-		DrawText(new Vector2(x, y), $"战毕 —— {title}", 18, new Color("e6c25c")); y += 34;
+		float x = box.Position.X + 30, y = box.Position.Y + 38;
+		string title = _sim.Winner == Side.Friend ? "捷!虏骑溃走"
+					 : _sim.Winner == Side.Enemy ? "败绩……全军溃散" : "战罢——虏骑遁去";
+		DrawText(new Vector2(x, y), $"战毕 —— {title}", 18, new Color("e6c25c")); y += 32;
 
-		DrawText(new Vector2(x, y), "本路各部(实况复盘):", 13, new Color("d8d2c4")); y += 22;
+		DrawText(new Vector2(x, y), "本路各部(实况复盘):", 13, new Color("d8d2c4")); y += 21;
 		foreach (var u in _sim.Units.Where(u => u.Side == Side.Friend))
 		{
 			DrawText(new Vector2(x, y),
 				$"{u.Name}〔{BattleSim.ArmCn(u.Type)}〕 {u.MaxCount}人 → 存{u.AliveCount}  斩获{u.Kills}  {u.StateCn}",
 				12, new Color("c8c2b4"));
-			y += 20;
+			y += 19;
 		}
-		y += 10;
+		y += 8;
 		int eDead = _sim.Units.Where(u => u.Side == Side.Enemy).Sum(u => u.MaxCount - u.AliveCount - u.Fled);
 		int eFled = _sim.Units.Where(u => u.Side == Side.Enemy).Sum(u => u.Fled);
-		DrawText(new Vector2(x, y), $"虏军:遗尸约{eDead},溃逃出野约{eFled}", 12, new Color("bcd2ec")); y += 30;
-		DrawText(new Vector2(x, y), "回车 · 班师回营(返回大地图)", 13, new Color("e6c25c")); y += 22;
-		DrawText(new Vector2(x, y), "(政治评语与帅帐问责,待接入战役层)", 11, new Color("9aa0a8"));
+		DrawText(new Vector2(x, y), $"虏军:遗尸约{eDead},溃逃出野约{eFled}", 12, new Color("bcd2ec")); y += 26;
+
+		if (_sim.Mission is { Verdict: { } v } m)
+		{
+			DrawText(new Vector2(x, y), "—— 行营裁断(周帅隔着他的雾看你)——", 13, new Color("e6c25c")); y += 21;
+			foreach (var line in v.Lines)
+			{ DrawText(new Vector2(x + 8, y), line, 12, line.Contains("(-") ? new Color("d9917a") : new Color("a8c99a")); y += 18; }
+			y += 8;
+			// 信任条
+			var barBg = new Rect2(x, y, 340, 12);
+			DrawRect(barBg, new Color(0.2f, 0.18f, 0.15f), true);
+			DrawRect(new Rect2(x, y, 340 * v.Trust / 100f, 12),
+				v.Trust >= 55 ? new Color("8fc97a") : v.Trust >= 35 ? new Color("e6c25c") : new Color("d97a6a"), true);
+			DrawRect(barBg, new Color("6f6a5e"), false, 1f);
+			DrawText(new Vector2(x + 352, y + 11), $"{v.Trust}/100", 12, new Color("d8d2c4"));
+			y += 26;
+			DrawText(new Vector2(x, y), $"裁断:「{v.VerdictCn}」", 14, new Color("f2e6c8")); y += 26;
+		}
+		DrawText(new Vector2(x, y), "回车 · 班师回营(返回大地图)", 13, new Color("e6c25c"));
 	}
 
 	// —— 绘制小工具 ——

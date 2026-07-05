@@ -25,6 +25,11 @@ public partial class GameState : Node
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
 
+	/// <summary>主帅信任(跨战役累积,0..100 基线 50)——每战的行营裁断向它结转。</summary>
+	public int Trust = 50;
+	/// <summary>上一战的行营裁断(帐内/大地图可回看);null=尚无战绩。</summary>
+	public Appraisal? LastVerdict;
+
 	public override void _Ready() => I = this;
 
 	public void StartBattle()
@@ -33,10 +38,15 @@ public partial class GameState : Node
 		CampOnly = false;
 	}
 
-	/// <summary>战毕班师:胜则虏骑绝迹于野。</summary>
+	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任。</summary>
 	public void EndBattleReturn()
 	{
 		if (Battle is { Over: true, Winner: CommandPost.Core.Side.Friend }) EnemyDefeated = true;
+		if (Battle?.Mission?.Verdict is { } v)
+		{
+			LastVerdict = v;
+			Trust = System.Math.Clamp(Trust + (v.Trust - 50), 0, 100);
+		}
 		Battle = null;
 		CampOnly = true;
 	}
