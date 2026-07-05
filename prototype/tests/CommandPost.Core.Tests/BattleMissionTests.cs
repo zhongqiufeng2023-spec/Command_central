@@ -127,4 +127,42 @@ public class BattleMissionTests
         Assert.Equal(4, sim.Mission!.Objectives.Count);
         Assert.True(sim.Mission.Orders.Count >= 2);                    // 分阶段中军令
     }
+
+    // ================= 战前布阵 =================
+
+    [Fact]
+    public void Deploying_FreezesTime_AndBlocksWartimeCommands()
+    {
+        var sim = BattleScenario.BlackPineField();                     // 默认带布阵
+        Assert.True(sim.Deploying);
+        for (int i = 0; i < 20; i++) sim.Tick();
+        Assert.Equal(0f, sim.Time);                                    // 时间冻结
+        sim.DispatchScout(new Vec2F(500, 200));
+        sim.IssueMove(sim.Units.First(u => u.Side == Side.Friend).Id, new Vec2F(300, 200), false);
+        Assert.Empty(sim.Riders);                                      // 战前不放骑手
+    }
+
+    [Fact]
+    public void DeployMove_Instant_ClampedToZone_ThenBattleStarts()
+    {
+        var sim = BattleScenario.BlackPineField();
+        var u = sim.Units.First(x => x.Side == Side.Friend);
+
+        Assert.True(sim.DeployMove(u.Id, new Vec2F(120, 180)));        // 区内:即时落位
+        Assert.True(u.Center.DistanceTo(new Vec2F(120, 180)) < 1f);
+        Assert.All(u.Soldiers, s => Assert.True(s.Pos.DistanceTo(u.Center) < 80f));
+        Assert.True(sim.Sandbox.Own[u.Id].Pos.DistanceTo(u.Center) < 1f);   // 沙盘即时同步
+
+        sim.DeployMove(u.Id, new Vec2F(800, 180));                     // 越界:钳回布阵区
+        Assert.True(u.Center.X <= sim.DeployZoneMaxX + 24f, $"应被钳在布阵区,实在 {u.Center}");
+
+        sim.DeployStance(u.Id, BStance.Skirmish);
+        Assert.Equal(BStance.Skirmish, u.Stance);
+
+        sim.FinishDeploy();
+        Assert.False(sim.Deploying);
+        for (int i = 0; i < 10; i++) sim.Tick();
+        Assert.True(sim.Time > 0.5f);                                  // 开战,时间走起
+        Assert.False(sim.DeployMove(u.Id, new Vec2F(150, 200)));       // 战中不可再瞬移
+    }
 }

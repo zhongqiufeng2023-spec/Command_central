@@ -36,6 +36,11 @@ public sealed partial class BattleSim
     /// <summary>瞭望台:帅帐望楼的实时视界半径(低保真、只在范围内、不留记忆)。</summary>
     public float WatchtowerRange { get; set; } = 180f;
 
+    /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
+    public bool Deploying { get; private set; }
+    /// <summary>布阵区东界(世界米):开战前只能摆在自家地界。</summary>
+    public float DeployZoneMaxX { get; private set; }
+
     private readonly Rng _rng;
     private int _nextUnit = 1, _nextSoldier = 1, _nextRider = 1, _nextFlag = 1;
     private readonly Dictionary<int, BattleUnit> _byId = new();
@@ -85,9 +90,18 @@ public sealed partial class BattleSim
     //  主循环(固定步 0.1s)
     // ====================================================================
 
+    public void BeginDeploy(float zoneMaxX) { Deploying = true; DeployZoneMaxX = zoneMaxX; }
+
+    public void FinishDeploy()
+    {
+        if (!Deploying) return;
+        Deploying = false;
+        Feed("各部就位,战鼓起!");
+    }
+
     public void Tick()
     {
-        if (Over) return;
+        if (Over || Deploying) return;
         Time += Dt;
         UpdateEnemyKnowledge();
         UpdateEnemyAi();

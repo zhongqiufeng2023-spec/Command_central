@@ -98,8 +98,8 @@ public partial class BattleRoot : Node2D
 	{
 		switch (k.Keycode)
 		{
-			case Key.Space: if (!_sim.Over) _paused = !_paused; break;
-			case Key.N: if (!_sim.Over) { _sim.Tick(); ConsumeAlerts(); } break;
+			case Key.Space: if (!_sim.Over && !_sim.Deploying) _paused = !_paused; break;
+			case Key.N: if (!_sim.Over && !_sim.Deploying) { _sim.Tick(); ConsumeAlerts(); } break;
 			case Key.Equal: if (_speedIdx < Speeds.Length - 1) _speedIdx++; break;
 			case Key.Minus: if (_speedIdx > 0) _speedIdx--; break;
 			case Key.Tab: _realView = !_realView; break;
@@ -128,6 +128,12 @@ public partial class BattleRoot : Node2D
 				}
 				break;
 			case Key.Home: _cam = new Vector2(_sim.Map.WorldW / 2f, _sim.Map.WorldH / 2f); _zoom = 0.9f; break;
+			case Key.Enter or Key.KpEnter when _sim.Deploying:
+				_sim.FinishDeploy();
+				_paused = false;
+				_banner = "战鼓起!此后一切军令须经令骑送达。";
+				_bannerAge = 0;
+				break;
 			case Key.Enter or Key.KpEnter when _sim.Over:
 				GameState.I?.EndBattleReturn();
 				GameState.Go(this, "res://Overworld.tscn");
@@ -171,11 +177,14 @@ public partial class BattleRoot : Node2D
 				_sim.RemoveFlagNear(world); break;
 
 			case MouseButton.Right when _selectedId >= 0 && !_sim.Over:
-				_sim.IssueMove(_selectedId, world, run: mb.ShiftPressed);      // 令骑真实出发
+				if (_sim.Deploying) _sim.DeployMove(_selectedId, world);       // 布阵:即时落位
+				else _sim.IssueMove(_selectedId, world, run: mb.ShiftPressed); // 战中:令骑真实出发
 				break;
 
 			case MouseButton.Middle when !_sim.Over:
-				_sim.DispatchScout(world); break;                              // 塘骑侦察
+				if (_sim.Deploying) { _banner = "布阵中——开战后方可遣塘骑。"; _bannerAge = 0; }
+				else _sim.DispatchScout(world);                                // 塘骑侦察
+				break;
 		}
 		QueueRedraw();
 	}
@@ -183,6 +192,13 @@ public partial class BattleRoot : Node2D
 	private void SendStance(BStance st)
 	{
 		if (_selectedId < 0 || _sim.Over) return;
+		if (_sim.Deploying)
+		{
+			_sim.DeployStance(_selectedId, st);
+			_banner = $"布阵:当面吩咐该部「{BattleSim.StanceCnOf(st)}」";
+			_bannerAge = 0;
+			return;
+		}
 		_sim.IssueStance(_selectedId, st);
 		_banner = $"令骑已出:令该部转「{BattleSim.StanceCnOf(st)}」";
 		_bannerAge = 0;

@@ -11,6 +11,7 @@ public partial class BattleRoot
 	{
 		DrawRect(new Rect2(0, 0, GetViewportRect().Size), new Color(_realView ? "22201a" : "2c2a22"), true);
 		DrawTerrain();
+		DrawDeployZone();
 
 		if (_realView) DrawRealWorld();
 		else DrawSandbox();
@@ -51,6 +52,18 @@ public partial class BattleRoot
 		var hq = ToScreen(_sim.HqPos);
 		DrawRect(new Rect2(hq - new Vector2(7, 7), new Vector2(14, 14)), new Color("d9b34a"), true);
 		DrawText(hq + new Vector2(0, -14), "帅帐", 12, new Color("e6c25c"), center: true);
+	}
+
+	/// <summary>布阵区(战前):西线自家地界淡金渲染 + 东界虚线。</summary>
+	private void DrawDeployZone()
+	{
+		if (!_sim.Deploying) return;
+		var tl = ToScreen(new Vec2F(0, 0));
+		var br = ToScreen(new Vec2F(_sim.DeployZoneMaxX, _sim.Map.WorldH));
+		DrawRect(new Rect2(tl, br - tl), new Color(0.85f, 0.7f, 0.3f, 0.05f), true);
+		for (float y = tl.Y; y < br.Y; y += 14)
+			DrawLine(new Vector2(br.X, y), new Vector2(br.X, Mathf.Min(y + 7, br.Y)), new Color(0.85f, 0.7f, 0.3f, 0.55f), 2f);
+		DrawText(new Vector2(br.X, tl.Y + 90), "布阵区界", 12, new Color("d9b34a"), center: true);
 	}
 
 	// —— 真实战场(对照):两千余士兵逐个画 ——

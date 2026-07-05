@@ -10,7 +10,7 @@ public static class BattleScenario
     /// 地图 60×34 瓦片(≈960×544 米):中部黑松林带、横贯官道、南河两滩、东北/西南丘陵。
     /// 玩家在西侧帅帐,只看沙盘;敌军 AI 驱动。
     /// </summary>
-    public static BattleSim BlackPineField(int seed = 20260703)
+    public static BattleSim BlackPineField(int seed = 20260703, bool deploy = true)
     {
         var sim = new BattleSim(BuildMap(), new Rng(seed)) { HqPos = new Vec2F(60, 272) };
 
@@ -32,6 +32,11 @@ public static class BattleScenario
 
         sim.Mission = BattleMissions.BlackPine();
         sim.Feed("帅帐军情:虏骑现于黑松岭以东,兵力不详。各部就位,听令而动。");
+        if (deploy)
+        {
+            sim.BeginDeploy(22 * BattleMap.TileSize);   // 布阵区:西线自家地界(黑松林以西)
+            sim.Feed("布阵:战前各部听你当面吩咐——选部右键摆位,1234 定姿态,回车开战。");
+        }
         return sim;
     }
 

@@ -10,7 +10,7 @@ public class ScoutPathTests
 {
     private static BattleSim EmptyField()
     {
-        var sim = BattleScenario.BlackPineField();
+        var sim = BattleScenario.BlackPineField(deploy: false);
         sim.Units.RemoveAll(u => u.Side == Side.Enemy);   // 清场:专测通行,不受截杀/战况干扰
         return sim;
     }
@@ -50,7 +50,7 @@ public class ScoutPathTests
     [Fact]
     public void Enemy_DoesNotSpawnOrStallInRiver()
     {
-        var sim = BattleScenario.BlackPineField();
+        var sim = BattleScenario.BlackPineField(deploy: false);
         // 开局:没有任何单位生成在河里(不可通行地形)
         Assert.DoesNotContain(sim.Units, u => BattleMap.Passable(sim.Map.At(u.Center)) == false);
 

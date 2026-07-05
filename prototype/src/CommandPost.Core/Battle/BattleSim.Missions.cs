@@ -62,6 +62,7 @@ public sealed partial class BattleSim
     /// 途中可被截杀 = 纯沉默——回执迟迟不至,就该疑心书没送到,补发一封。</summary>
     public void SendHqReport()
     {
+        if (Deploying) return;
         var exit = new Vec2F(HqExitX, HqPos.Y);
         var r = new Rider
         {
