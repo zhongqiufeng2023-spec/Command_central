@@ -26,6 +26,7 @@ public partial class OverworldRoot : Node2D
 	private double _t0;
 	private string _banner = ""; private double _bannerAge = 99;
 	private Font _font = null!;
+	private readonly PauseOverlay _menu = new();
 
 	public override void _Ready()
 	{
@@ -37,6 +38,7 @@ public partial class OverworldRoot : Node2D
 		BuildMap();
 		_pos = GameState.I.PartyPos;
 		_enemy = GameState.I.EnemyPos;
+		GameState.I.SaveRun();                          // 上大地图即落一笔存档(战毕班师也走这里)
 		GetWindow().GrabFocus();
 	}
 
@@ -94,6 +96,7 @@ public partial class OverworldRoot : Node2D
 	public override void _Process(double delta)
 	{
 		_t0 += delta; _bannerAge += delta;
+		if (_menu.Open) { QueueRedraw(); return; }
 		float dt = (float)delta;
 
 		var dir = Vector2.Zero;
@@ -150,15 +153,28 @@ public partial class OverworldRoot : Node2D
 
 	public override void _Input(InputEvent e)
 	{
-		if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb)
-			_moveTarget = mb.Position - CamOffset();
-		else if (e is InputEventKey { Pressed: true, Echo: false } k && k.Keycode == Key.C)
+		if (e is InputEventKey { Pressed: true, Echo: false } k)
 		{
-			GameState.I.PartyPos = _pos; GameState.I.EnemyPos = _enemy;
-			GameState.I.CampOnly = true; GameState.I.Battle = null;
-			GameState.Go(this, "res://Tent.tscn");
+			switch (_menu.HandleKey(k, out bool consumed))
+			{
+				case PauseOverlay.Act.SaveToTitle:
+					SyncState(); GameState.I.SaveRun(); GameState.Go(this, "res://Title.tscn"); return;
+				case PauseOverlay.Act.Quit:
+					SyncState(); GameState.I.SaveRun(); GetTree().Quit(); return;
+			}
+			if (consumed) return;
+			if (k.Keycode == Key.C)
+			{
+				SyncState();
+				GameState.I.CampOnly = true; GameState.I.Battle = null;
+				GameState.Go(this, "res://Tent.tscn");
+			}
 		}
+		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open)
+			_moveTarget = mb.Position - CamOffset();
 	}
+
+	private void SyncState() { GameState.I.PartyPos = _pos; GameState.I.EnemyPos = _enemy; }
 
 	public override void _Draw()
 	{
@@ -232,16 +248,18 @@ public partial class OverworldRoot : Node2D
 		DrawSetTransform(Vector2.Zero, 0, Vector2.One);
 
 		// —— HUD 层 ——
-		DrawString(_font, new Vector2(14, 24), "大酆边野 · 行军", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+		DrawString(_font, new Vector2(14, 24), $"大酆边野 · 行军 · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 		DrawString(_font, new Vector2(14, 44),
 			GameState.I.EnemyDefeated
-				? "虏骑已绝迹于野。C=扎营入帐 · WASD/点击=行军"
-				: "军令:进抵黑松岭一线,试探当面之敌 | WASD/点击=行军 · C=扎营入帐(先扎营再推进,可用瞭望台)",
+				? "虏骑已绝迹于野。C=扎营入帐 · WASD/点击=行军 · Esc=菜单"
+				: "军令:进抵黑松岭一线,试探当面之敌 | WASD/点击=行军 · C=扎营入帐(先扎营再推进,可用瞭望台) · Esc=菜单",
 			HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
 		DrawMinimap();
 
 		if (_banner != "" && _bannerAge < 4)
 			DrawString(_font, new Vector2(360, 90), _banner, HorizontalAlignment.Left, -1, 14, new Color("f2e6c8"));
+
+		_menu.Draw(this, _font);
 	}
 
 	private void DrawMinimap()

@@ -26,6 +26,7 @@ public partial class TentRoot : Node2D
 	private double _acc;                                // 战役后台推进累加器
 	private int _seenAlerts;
 	private string _banner = ""; private double _bannerAge = 99;
+	private readonly PauseOverlay _menu = new();        // Esc 暂停菜单(开着时战役也停)
 
 	// —— 帐内布置(障碍/交互区)——
 	private static readonly Rect2 InsideBounds = new(220, 150, 680, 470);
@@ -56,6 +57,7 @@ public partial class TentRoot : Node2D
 	public override void _Process(double delta)
 	{
 		_t += delta; _bannerAge += delta;
+		if (_menu.Open) { QueueRedraw(); return; }      // 军议暂歇:连外面的仗都停一停
 
 		// 战役后台推进:你在帐里走动,外面照样打(1x 实时)
 		if (GameState.I.BattleActive)
@@ -133,6 +135,18 @@ public partial class TentRoot : Node2D
 	public override void _Input(InputEvent e)
 	{
 		if (e is not InputEventKey { Pressed: true, Echo: false } k) return;
+
+		// 台上 Esc = 下台;其余 Esc 交给暂停菜单
+		if (_area == Area.Tower && !_menu.Open && k.Keycode == Key.Escape) { _area = Area.Outside; return; }
+		switch (_menu.HandleKey(k, out bool consumed))
+		{
+			case PauseOverlay.Act.SaveToTitle:
+				GameState.I.SaveRun(); GameState.Go(this, "res://Title.tscn"); return;
+			case PauseOverlay.Act.Quit:
+				GameState.I.SaveRun(); GetTree().Quit(); return;
+		}
+		if (consumed) return;
+
 		switch (k.Keycode)
 		{
 			case Key.E:
@@ -140,7 +154,7 @@ public partial class TentRoot : Node2D
 				else if (NearSandTable)
 				{
 					if (GameState.I.Battle != null) GameState.Go(this, "res://Battle.tscn");
-					else { _banner = "并无战事,沙盘空空。(去大地图寻虏骑,或按 Esc 拔营)"; _bannerAge = 0; }
+					else { _banner = "并无战事,沙盘空空。(去大地图寻虏骑;拔营走南辕门)"; _bannerAge = 0; }
 				}
 				else if (NearTower) _area = Area.Tower;
 				break;
@@ -148,10 +162,6 @@ public partial class TentRoot : Node2D
 				GameState.I.EasySandboxVision = !GameState.I.EasySandboxVision;
 				_banner = $"低难度·沙盘瞭望叠加:{(GameState.I.EasySandboxVision ? "开" : "关(要看敌情,亲自登台)")}";
 				_bannerAge = 0;
-				break;
-			case Key.Escape:
-				if (_area == Area.Tower) _area = Area.Outside;
-				else TryLeaveCamp();
 				break;
 		}
 	}

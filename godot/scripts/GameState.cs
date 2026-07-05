@@ -52,4 +52,57 @@ public partial class GameState : Node
 	}
 
 	public static void Go(Node from, string scene) => from.GetTree().ChangeSceneToFile(scene);
+
+	// ====================================================================
+	//  存档(user://save.json):只存大地图进度与元状态;战役不可序列化,战中不存。
+	// ====================================================================
+
+	private const string SavePath = "user://save.json";
+	public static bool SaveExists => FileAccess.FileExists(SavePath);
+
+	/// <summary>新开一局:回到出征起点(种子随时钟变,回回不同)。</summary>
+	public void NewRun()
+	{
+		Battle = null; CampOnly = true; EasySandboxVision = false;
+		PartyPos = new Vector2(55 * 16, 66 * 16);
+		EnemyPos = new Vector2(150 * 16, 64 * 16);
+		EnemyDefeated = false; Trust = 50; LastVerdict = null;
+		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
+	}
+
+	/// <summary>存档(战中静默跳过——战役打完才有得存)。</summary>
+	public void SaveRun()
+	{
+		if (BattleActive) return;
+		var d = new Godot.Collections.Dictionary
+		{
+			["px"] = PartyPos.X, ["py"] = PartyPos.Y,
+			["ex"] = EnemyPos.X, ["ey"] = EnemyPos.Y,
+			["defeated"] = EnemyDefeated, ["trust"] = Trust,
+			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
+			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
+		};
+		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
+		f?.StoreString(Json.Stringify(d));
+	}
+
+	public bool LoadRun()
+	{
+		if (!SaveExists) return false;
+		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
+		if (f == null) return false;
+		var v = Json.ParseString(f.GetAsText());
+		if (v.VariantType != Variant.Type.Dictionary) return false;
+		var d = v.AsGodotDictionary();
+		Battle = null; CampOnly = true;
+		PartyPos = new Vector2(d["px"].AsSingle(), d["py"].AsSingle());
+		EnemyPos = new Vector2(d["ex"].AsSingle(), d["ey"].AsSingle());
+		EnemyDefeated = d["defeated"].AsBool();
+		Trust = d["trust"].AsInt32();
+		EasySandboxVision = d["easy"].AsBool();
+		_battleSeed = d["seed"].AsInt32();
+		int vt = d["vtrust"].AsInt32();
+		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
+		return true;
+	}
 }

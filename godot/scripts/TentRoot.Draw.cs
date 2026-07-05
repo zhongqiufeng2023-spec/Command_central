@@ -19,6 +19,7 @@ public partial class TentRoot
 		GeneralSprite.Draw(this, _pos + new Vector2(-22, -84), 44, 88, _dir, _phase, _moving);
 
 		DrawHudCommon();
+		_menu.Draw(this, _font);
 	}
 
 	// ====================================================================
@@ -267,9 +268,9 @@ public partial class TentRoot
 		string place = _area == Area.Inside ? "中军帐" : "营区";
 		string war = GameState.I.BattleActive ? $"战况:{BattleSim.FormatT(GameState.I.Battle!.Time)} 进行中"
 				   : GameState.I.Battle is { Over: true } ? "战况:已分胜负(沙盘内班师)" : "无战事";
-		DrawString(_font, new Vector2(16, 26), $"{place} · {war}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+		DrawString(_font, new Vector2(16, 26), $"{place} · {war} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 		DrawString(_font, new Vector2(16, 46),
-			"WASD/方向键 行走 · E 交互 · F1 低难度(沙盘瞭望叠加) · Esc 拔营",
+			"WASD/方向键 行走 · E 交互 · F1 低难度(沙盘瞭望叠加) · Esc 菜单 · 拔营走南辕门",
 			HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
 		DrawBannerLine();
 	}
