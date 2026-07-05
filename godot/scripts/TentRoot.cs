@@ -150,13 +150,13 @@ public partial class TentRoot : Node2D
 		switch (k.Keycode)
 		{
 			case Key.E:
-				if (_area == Area.Tower) { _area = Area.Outside; }
+				if (_area == Area.Tower) { _area = Area.Outside; Sfx.Play(this, Sfx.Click); }
 				else if (NearSandTable)
 				{
-					if (GameState.I.Battle != null) GameState.Go(this, "res://Battle.tscn");
+					if (GameState.I.Battle != null) { Sfx.Play(this, Sfx.Click); GameState.Go(this, "res://Battle.tscn"); }
 					else { _banner = "并无战事,沙盘空空。(去大地图寻虏骑;拔营走南辕门)"; _bannerAge = 0; }
 				}
-				else if (NearTower) _area = Area.Tower;
+				else if (NearTower) { _area = Area.Tower; Sfx.Play(this, Sfx.Click); }
 				break;
 			case Key.F1:
 				GameState.I.EasySandboxVision = !GameState.I.EasySandboxVision;

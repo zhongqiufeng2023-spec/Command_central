@@ -30,6 +30,7 @@ public partial class BattleRoot : Node2D
 	private int _seenAlerts;
 	private string _banner = "";
 	private double _bannerAge = 99;
+	private bool _endSung;                      // 胜败尾声只唱一次
 
 	public override void _Ready()
 	{
@@ -41,6 +42,8 @@ public partial class BattleRoot : Node2D
 		_font = sf;
 
 		_cam = new Vector2(_sim.Map.WorldW / 2f, _sim.Map.WorldH / 2f);
+		_endSung = _sim.Over;                   // 中途回帐再进来,别重唱
+		_seenAlerts = _sim.Alerts.Count;        // 帐内已听过的横幅不再叮
 		GetWindow().GrabFocus();
 		QueueRedraw();
 	}
@@ -73,14 +76,23 @@ public partial class BattleRoot : Node2D
 
 	private void ConsumeAlerts()
 	{
-		if (_sim.Alerts.Count <= _seenAlerts) return;
-		for (int i = _seenAlerts; i < _sim.Alerts.Count; i++)
+		if (_sim.Alerts.Count > _seenAlerts)
 		{
-			var a = _sim.Alerts[i];
-			_banner = a.Text; _bannerAge = 0;
-			if (a.Pause) _paused = true;
+			bool chime = false;
+			for (int i = _seenAlerts; i < _sim.Alerts.Count; i++)
+			{
+				var a = _sim.Alerts[i];
+				_banner = a.Text; _bannerAge = 0;
+				if (a.Pause) { _paused = true; chime = true; }
+			}
+			_seenAlerts = _sim.Alerts.Count;
+			if (chime) Sfx.Play(this, Sfx.Alert);
 		}
-		_seenAlerts = _sim.Alerts.Count;
+		if (_sim.Over && !_endSung)
+		{
+			_endSung = true;
+			Sfx.Play(this, _sim.Winner == Side.Friend ? Sfx.Win : _sim.Winner == Side.Enemy ? Sfx.Lose : Sfx.Horn, -6f);
+		}
 	}
 
 	// —— 坐标 ——
@@ -108,11 +120,12 @@ public partial class BattleRoot : Node2D
 				{ _sim.RequestStatus(_selectedId); _banner = "令骑已出:探问该部近况……"; _bannerAge = 0; }
 				break;
 			case Key.B:
-				if (!_sim.Over && _sim.Mission != null)
+				if (!_sim.Over && !_sim.Deploying && _sim.Mission != null)
 				{
 					_sim.SendHqReport();
 					_banner = $"军书发出:具报敌情 {_sim.Sandbox.Enemy.Count} 条——回执未至前,别当它送到了";
 					_bannerAge = 0;
+					Sfx.Play(this, Sfx.Gallop);
 				}
 				break;
 			case Key.Key1: SendStance(BStance.Attack); break;
@@ -133,6 +146,7 @@ public partial class BattleRoot : Node2D
 				_paused = false;
 				_banner = "战鼓起!此后一切军令须经令骑送达。";
 				_bannerAge = 0;
+				Sfx.Play(this, Sfx.Drum, -4f);
 				break;
 			case Key.Enter or Key.KpEnter when _sim.Over:
 				GameState.I?.EndBattleReturn();
@@ -177,13 +191,13 @@ public partial class BattleRoot : Node2D
 				_sim.RemoveFlagNear(world); break;
 
 			case MouseButton.Right when _selectedId >= 0 && !_sim.Over:
-				if (_sim.Deploying) _sim.DeployMove(_selectedId, world);       // 布阵:即时落位
-				else _sim.IssueMove(_selectedId, world, run: mb.ShiftPressed); // 战中:令骑真实出发
+				if (_sim.Deploying) { _sim.DeployMove(_selectedId, world); Sfx.Play(this, Sfx.Click); }
+				else { _sim.IssueMove(_selectedId, world, run: mb.ShiftPressed); Sfx.Play(this, Sfx.Gallop); }
 				break;
 
 			case MouseButton.Middle when !_sim.Over:
 				if (_sim.Deploying) { _banner = "布阵中——开战后方可遣塘骑。"; _bannerAge = 0; }
-				else _sim.DispatchScout(world);                                // 塘骑侦察
+				else { _sim.DispatchScout(world); Sfx.Play(this, Sfx.Gallop); }
 				break;
 		}
 		QueueRedraw();
@@ -197,11 +211,13 @@ public partial class BattleRoot : Node2D
 			_sim.DeployStance(_selectedId, st);
 			_banner = $"布阵:当面吩咐该部「{BattleSim.StanceCnOf(st)}」";
 			_bannerAge = 0;
+			Sfx.Play(this, Sfx.Click);
 			return;
 		}
 		_sim.IssueStance(_selectedId, st);
 		_banner = $"令骑已出:令该部转「{BattleSim.StanceCnOf(st)}」";
 		_bannerAge = 0;
+		Sfx.Play(this, Sfx.Gallop);
 	}
 
 	private void ZoomAt(Vector2 screen, float factor)

@@ -36,8 +36,8 @@ public partial class TitleRoot : Node2D
 			}
 			switch (k.Keycode)
 			{
-				case Key.W or Key.Up: _sel = (_sel + Items.Length - 1) % Items.Length; break;
-				case Key.S or Key.Down: _sel = (_sel + 1) % Items.Length; break;
+				case Key.W or Key.Up: _sel = (_sel + Items.Length - 1) % Items.Length; Sfx.Play(this, Sfx.Click); break;
+				case Key.S or Key.Down: _sel = (_sel + 1) % Items.Length; Sfx.Play(this, Sfx.Click); break;
 				case Key.Enter or Key.KpEnter: Activate(_sel); break;
 				case Key.Escape: GetTree().Quit(); break;
 			}
@@ -67,14 +67,15 @@ public partial class TitleRoot : Node2D
 		switch (i)
 		{
 			case 0:
+				Sfx.Play(this, Sfx.Drum);
 				GameState.I.NewRun();
 				GameState.Go(this, "res://Overworld.tscn");
 				break;
 			case 1:
-				if (GameState.I.LoadRun()) GameState.Go(this, "res://Overworld.tscn");
-				else { _hint = "尚无存档——先出征,行军中的进度会自动记下。"; _hintAge = 0; }
+				if (GameState.I.LoadRun()) { Sfx.Play(this, Sfx.Drum); GameState.Go(this, "res://Overworld.tscn"); }
+				else { _hint = "尚无存档——先出征,行军中的进度会自动记下。"; _hintAge = 0; Sfx.Play(this, Sfx.Click); }
 				break;
-			case 2: _help = true; break;
+			case 2: _help = true; Sfx.Play(this, Sfx.Click); break;
 			case 3: GetTree().Quit(); break;
 		}
 	}

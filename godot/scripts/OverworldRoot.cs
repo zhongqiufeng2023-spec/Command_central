@@ -154,7 +154,11 @@ public partial class OverworldRoot : Node2D
 		// —— 事件:虏帐(先破当面之虏方可近前;破敌后抵达=章末)——
 		if (_pos.DistanceTo(FoeCamp) < 120f)
 		{
-			if (GameState.I.EnemyDefeated) { _ending = true; _moveTarget = null; }
+			if (GameState.I.EnemyDefeated)
+			{
+				if (!_ending) Sfx.Play(this, Sfx.Horn, -5f);
+				_ending = true; _moveTarget = null;
+			}
 			else
 			{
 				_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
@@ -180,6 +184,7 @@ public partial class OverworldRoot : Node2D
 			{
 				GameState.I.PartyPos = _pos; GameState.I.EnemyPos = _enemy;
 				GameState.I.StartBattle();
+				Sfx.Play(this, Sfx.Drum, -4f);
 				GameState.Go(this, "res://Tent.tscn");
 				return;
 			}
@@ -217,7 +222,7 @@ public partial class OverworldRoot : Node2D
 				GameState.I.CampOnly = true; GameState.I.Battle = null;
 				GameState.Go(this, "res://Tent.tscn");
 			}
-			else if (k.Keycode == Key.E && NearHq) _letterOpen = true;
+			else if (k.Keycode == Key.E && NearHq) { _letterOpen = true; Sfx.Play(this, Sfx.Click); }
 		}
 		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
 			_moveTarget = mb.Position - CamOffset();
