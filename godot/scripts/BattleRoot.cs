@@ -51,6 +51,7 @@ public partial class BattleRoot : Node2D
 	public override void _Process(double delta)
 	{
 		_bannerAge += delta;
+		TickReplay(delta);
 
 		// 镜头平移
 		float pan = 420f / _zoom * (float)delta;
@@ -108,8 +109,13 @@ public partial class BattleRoot : Node2D
 
 	private void HandleKey(InputEventKey k)
 	{
+		if (_replayMode) { HandleReplayKey(k); QueueRedraw(); return; }
 		switch (k.Keycode)
 		{
+			case Key.P when _sim.Over:
+				EnterReplay();
+				Sfx.Play(this, Sfx.Click);
+				break;
 			case Key.Space: if (!_sim.Over && !_sim.Deploying) _paused = !_paused; break;
 			case Key.N: if (!_sim.Over && !_sim.Deploying) { _sim.Tick(); ConsumeAlerts(); } break;
 			case Key.Equal: if (_speedIdx < Speeds.Length - 1) _speedIdx++; break;
@@ -162,6 +168,7 @@ public partial class BattleRoot : Node2D
 
 	private void HandleMouse(InputEventMouseButton mb)
 	{
+		if (HandleReplayMouse(mb)) { QueueRedraw(); return; }
 		var world = ToWorld(mb.Position);
 
 		switch (mb.ButtonIndex)

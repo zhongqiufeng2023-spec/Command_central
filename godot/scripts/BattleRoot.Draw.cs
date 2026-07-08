@@ -9,8 +9,11 @@ public partial class BattleRoot
 {
 	public override void _Draw()
 	{
-		DrawRect(new Rect2(0, 0, GetViewportRect().Size), new Color(_realView ? "22201a" : "2c2a22"), true);
+		DrawRect(new Rect2(0, 0, GetViewportRect().Size), new Color(_realView || _replayMode ? "22201a" : "2c2a22"), true);
 		DrawTerrain();
+
+		if (_replayMode) { DrawReplay(); return; }   // 复盘模式:上帝视角对照回放
+
 		DrawDeployZone();
 
 		if (_realView) DrawRealWorld();
@@ -32,7 +35,7 @@ public partial class BattleRoot
 				var p = ToScreen(new Vec2F(tx * BattleMap.TileSize, ty * BattleMap.TileSize));
 				if (p.X < -ts || p.Y < -ts || p.X > 1130 || p.Y > 770) continue;
 				var t = m.AtTile(tx, ty);
-				Color c = _realView
+				Color c = _realView || _replayMode
 					? t switch
 					{
 						BTerrain.Road => new Color("6b5b3e"), BTerrain.Forest => new Color("2e4023"),

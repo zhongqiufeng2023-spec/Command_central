@@ -134,7 +134,7 @@ public partial class BattleRoot
 			y += 26;
 			DrawText(new Vector2(x, y), $"裁断:「{v.VerdictCn}」", 14, new Color("f2e6c8")); y += 26;
 		}
-		DrawText(new Vector2(x, y), "回车 · 班师回营(返回大地图)", 13, new Color("e6c25c"));
+		DrawText(new Vector2(x, y), "回车 · 班师回营(返回大地图)      P · 复盘对照(认知 ↔ 真相)", 13, new Color("e6c25c"));
 	}
 
 	// —— 绘制小工具 ——

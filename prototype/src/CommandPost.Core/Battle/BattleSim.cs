@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -38,6 +38,10 @@ public sealed partial class BattleSim
 
     /// <summary>难度参数向量(信息丰度旋钮,PRD §11)。</summary>
     public BDifficultyProfile Difficulty { get; set; } = BDifficultyProfile.Of(BDifficulty.Normal);
+
+    /// <summary>复盘胶卷:逐秒录真相帧+认知帧;战毕对照回放(上帝视角只在战后)。</summary>
+    public BattleReplay Replay { get; } = new();
+    private float _replayClock = 1f;   // 首帧在开战第一秒落下
 
     /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
     public bool Deploying { get; private set; }
@@ -120,6 +124,24 @@ public sealed partial class BattleSim
         UpdateArrows();
         RemoveDead();
         CheckBattleEnd();
+        RecordReplayFrame();   // 放在胜负判定后:战毕那一刻的收尾帧也录上
+    }
+
+    /// <summary>逐秒录一帧(战毕再补一帧收尾)。内存量级:20 分钟 ≈ 1200 帧,忽略不计。</summary>
+    private void RecordReplayFrame()
+    {
+        _replayClock += Dt;
+        if (_replayClock < 1f && !Over) return;
+        _replayClock = 0;
+        var f = new BReplayFrame { T = Time };
+        foreach (var u in Units)
+            f.Units.Add(new BReplayUnit(u.Id, u.Side, u.Allied, u.Center, u.AliveCount, u.State));
+        foreach (var r in Riders)
+            f.Riders.Add(new BReplayRider(r.Pos, r.Kind, r.Lost));
+        foreach (var (id, m) in Sandbox.Enemy) f.BeliefEnemy.Add(new BReplayMark(id, m.Pos, m.Est, m.T));
+        foreach (var (id, m) in Sandbox.Own) f.BeliefOwn.Add(new BReplayMark(id, m.Pos, m.Count, m.T));
+        foreach (var (id, m) in Sandbox.Ally) f.BeliefAlly.Add(new BReplayMark(id, m.Pos, m.Est, m.T));
+        Replay.Frames.Add(f);
     }
 
     /// <summary>左翼(友邻一路)是否已崩:折损逾六成五,或全员失序——一支残队独存不算「左翼尚在」。</summary>
