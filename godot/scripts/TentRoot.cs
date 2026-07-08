@@ -32,7 +32,9 @@ public partial class TentRoot : Node2D
 	private static readonly Rect2 InsideBounds = new(220, 150, 680, 470);
 	private static readonly Rect2 SandTable = new(620, 300, 240, 150);     // 沙盘台(障碍+交互)
 	private static readonly Rect2 Brazier = new(300, 240, 40, 40);         // 火盆
+	private static readonly Rect2 OrderDesk = new(700, 170, 170, 56);      // 军令案(读行营文书)
 	private static readonly Rect2 DoorInside = new(520, 596, 90, 26);      // 帐门(南)
+	private bool _deskOpen;                                                // 军令案文书摊开中
 
 	// —— 营区布置 ——
 	private static readonly Rect2 OutsideBounds = new(70, 130, 980, 560);
@@ -76,7 +78,7 @@ public partial class TentRoot : Node2D
 			}
 		}
 
-		if (_area != Area.Tower) UpdateWalk((float)delta);
+		if (_area != Area.Tower && !_deskOpen) UpdateWalk((float)delta);   // 读文书时驻足(仗照打——读也是时间)
 		QueueRedraw();
 	}
 
@@ -121,7 +123,7 @@ public partial class TentRoot : Node2D
 
 	private bool Blocked(Vector2 p) => _area switch
 	{
-		Area.Inside => SandTable.Grow(6).HasPoint(p) || Brazier.Grow(4).HasPoint(p),
+		Area.Inside => SandTable.Grow(6).HasPoint(p) || Brazier.Grow(4).HasPoint(p) || OrderDesk.Grow(4).HasPoint(p),
 		Area.Outside => TowerBase.Grow(4).HasPoint(p) || Blocks(OutsideTents, p),
 		_ => false
 	};
@@ -130,12 +132,19 @@ public partial class TentRoot : Node2D
 
 	// —— 交互 ——
 	private bool NearSandTable => _area == Area.Inside && SandTable.Grow(46).HasPoint(_pos);
+	private bool NearOrderDesk => _area == Area.Inside && OrderDesk.Grow(48).HasPoint(_pos);
 	private bool NearTower => _area == Area.Outside && TowerBase.Grow(40).HasPoint(_pos);
 
 	public override void _Input(InputEvent e)
 	{
 		if (e is not InputEventKey { Pressed: true, Echo: false } k) return;
 
+		// 军令案摊开中:任意合上键收起
+		if (_deskOpen)
+		{
+			if (k.Keycode is Key.E or Key.Escape or Key.Enter or Key.KpEnter) { _deskOpen = false; Sfx.Play(this, Sfx.Click); }
+			return;
+		}
 		// 台上 Esc = 下台;其余 Esc 交给暂停菜单
 		if (_area == Area.Tower && !_menu.Open && k.Keycode == Key.Escape) { _area = Area.Outside; return; }
 		switch (_menu.HandleKey(k, out bool consumed))
@@ -156,6 +165,7 @@ public partial class TentRoot : Node2D
 					if (GameState.I.Battle != null) { Sfx.Play(this, Sfx.Click); GameState.Go(this, "res://Battle.tscn"); }
 					else { _banner = "并无战事,沙盘空空。(去大地图寻虏骑;拔营走南辕门)"; _bannerAge = 0; }
 				}
+				else if (NearOrderDesk) { _deskOpen = true; Sfx.Play(this, Sfx.Click); }
 				else if (NearTower) { _area = Area.Tower; Sfx.Play(this, Sfx.Click); }
 				break;
 			case Key.F1:

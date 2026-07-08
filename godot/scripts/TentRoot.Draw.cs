@@ -19,7 +19,64 @@ public partial class TentRoot
 		GeneralSprite.Draw(this, _pos + new Vector2(-22, -84), 44, 88, _dir, _phase, _moving);
 
 		DrawHudCommon();
+		DrawDeskOverlay();
 		_menu.Draw(this, _font);
+	}
+
+	/// <summary>军令案:摊开的行营文书——只列「已送达」的中军令(支柱①:没到的令不存在)。</summary>
+	private void DrawDeskOverlay()
+	{
+		if (!_deskOpen) return;
+		DrawRect(new Rect2(0, 0, 1120, 760), new Color(0, 0, 0, 0.62f), true);
+		float w = 700, h = 540;
+		var box = new Rect2((1120 - w) / 2, (760 - h) / 2, w, h);
+		DrawRect(box, new Color(0.16f, 0.13f, 0.09f, 0.98f), true);
+		DrawRect(box, new Color("d9b34a"), false, 2f);
+		float x = box.Position.X + 36, y = box.Position.Y + 42;
+
+		void L(string s, int size, string col, float dy = 0)
+		{ DrawString(_font, new Vector2(x, y), s, HorizontalAlignment.Left, (int)w - 72, size, new Color(col)); y += size + 8 + dy; }
+
+		L("军令案 · 行营文书", 19, "e6c25c", 6);
+
+		var b = GameState.I.Battle;
+		if (b?.Mission is { } m)
+		{
+			L($"战役:{m.Title}", 14, "d8d2c4", 2);
+			foreach (var o in m.Orders)
+			{
+				if (!o.Delivered) continue;                        // 令未至=案上无此文书
+				L($"〔{o.TitleCn}〕{o.TextCn}", 12, "c8c2b4");
+			}
+			y += 6;
+			L("目标进度(以尔所知):", 13, "e6c25c");
+			foreach (var o in m.Objectives)
+			{
+				string mark = !o.Active ? "◇" : o.State switch
+				{
+					CommandPost.Core.BObjectiveState.Done => "✓",
+					CommandPost.Core.BObjectiveState.Failed => "✗",
+					CommandPost.Core.BObjectiveState.Partial => "◐",
+					_ => "・"
+				};
+				L($"  {mark} {o.Cn}{(o.Active ? "" : "〔令未至〕")}", 12,
+					o.State == CommandPost.Core.BObjectiveState.Done ? "8fc97a"
+					: o.State == CommandPost.Core.BObjectiveState.Failed ? "d97a6a" : "c8c2b4");
+			}
+		}
+		else
+		{
+			L("〔征虏中军令〕周崇谕前锋总兵官:虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 12, "c8c2b4");
+			L("命尔部即日东进,进抵岭一线;虏情务须侦明,军书具报,相机破之。", 12, "c8c2b4", 4);
+			L($"粮草 {(int)GameState.I.Grain} · 士卒疲惫 {(int)GameState.I.Fatigue}", 12, "d8d2c4");
+		}
+
+		y += 6;
+		L($"主帅信任:{GameState.I.Trust} / 100", 13, "d8d2c4");
+		if (GameState.I.LastVerdict is { } v)
+			L($"上战裁断:「{v.VerdictCn}」", 12, "c8c2b4");
+
+		DrawString(_font, new Vector2(x, box.End.Y - 26), "E / Esc · 合上文书(读文书时,外面的仗照打)", HorizontalAlignment.Left, -1, 12, new Color("e6c25c"));
 	}
 
 	// ====================================================================
@@ -60,6 +117,7 @@ public partial class TentRoot
 		DrawRect(new Rect2(700, 170, 170, 56), new Color("3a2c1c"), true);           // 军令案
 		DrawRect(new Rect2(714, 182, 60, 32), new Color("d8d2c4"), true);            // 文书
 		DrawRect(new Rect2(790, 180, 8, 36), new Color("c8b088"), true);             // 令箭
+		DrawLabel(new Vector2(OrderDesk.GetCenter().X, OrderDesk.End.Y + 16), "军令案", new Color("e6c25c"));
 
 		// 帐门(南,掀开的口)
 		DrawRect(DoorInside.Grow(6), new Color("2a1a14"), true);
@@ -68,6 +126,8 @@ public partial class TentRoot
 		if (NearSandTable)
 			DrawHint(SandTable.GetCenter() + new Vector2(0, -100),
 				GameState.I.Battle != null ? "E · 入沙盘推演" : "E · 看沙盘(无战事)");
+		else if (NearOrderDesk)
+			DrawHint(OrderDesk.GetCenter() + new Vector2(0, 76), "E · 阅军令文书");
 	}
 
 	// ====================================================================
