@@ -38,6 +38,8 @@ public partial class GameState : Node
 
 	/// <summary>主帅信任(跨战役累积,0..100 基线 50)——每战的行营裁断向它结转。</summary>
 	public int Trust = 50;
+	/// <summary>万骨账:出征以来尔部阵亡将士累计——功业是用这个数堆出来的。</summary>
+	public int Bones;
 	/// <summary>上一战的行营裁断(帐内/大地图可回看);null=尚无战绩。</summary>
 	public Appraisal? LastVerdict;
 
@@ -61,7 +63,7 @@ public partial class GameState : Node
 		if (Grain <= 0f) Battle.Feed("粮尽!士卒枵腹而战,军心浮动……");
 	}
 
-	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任。</summary>
+	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任;阵亡入万骨账。</summary>
 	public void EndBattleReturn()
 	{
 		if (Battle is { Over: true, Winner: CommandPost.Core.Side.Friend }) EnemyDefeated = true;
@@ -70,6 +72,10 @@ public partial class GameState : Node
 			LastVerdict = v;
 			Trust = System.Math.Clamp(Trust + (v.Trust - 50), 0, 100);
 		}
+		if (Battle != null)
+			foreach (var u in Battle.Units)
+				if (u.Side == CommandPost.Core.Side.Friend && !u.Allied)
+					Bones += System.Math.Max(0, u.MaxCount - u.AliveCount - u.Fled);
 		Battle = null;
 		CampOnly = true;
 	}
@@ -90,7 +96,7 @@ public partial class GameState : Node
 		EasySandboxVision = Difficulty == BDifficulty.Easy;   // 轻松档:沙盘代望默认开
 		PartyPos = new Vector2(55 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
-		EnemyDefeated = false; Trust = 50; LastVerdict = null;
+		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
 	}
@@ -107,6 +113,7 @@ public partial class GameState : Node
 			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
 			["diff"] = (int)Difficulty,
 			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
+			["bones"] = Bones,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -132,6 +139,7 @@ public partial class GameState : Node
 		CampaignHours = d.ContainsKey("hours") ? d["hours"].AsSingle() : 8f;
 		Grain = d.ContainsKey("grain") ? d["grain"].AsSingle() : 100f;
 		Fatigue = d.ContainsKey("fatigue") ? d["fatigue"].AsSingle() : 0f;
+		Bones = d.ContainsKey("bones") ? d["bones"].AsInt32() : 0;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;

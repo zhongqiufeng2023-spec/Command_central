@@ -466,8 +466,9 @@ public partial class OverworldRoot : Node2D
 		DrawString(_font, new Vector2(0, y), $"用时 {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Center, 1120, 14, new Color("d8d2c4")); y += 26;
 		if (GameState.I.LastVerdict is { } v)
 			DrawString(_font, new Vector2(0, y), $"行营终评:「{v.VerdictCn}」", HorizontalAlignment.Center, 1120, 14, new Color("f2e6c8"));
-		y += 40;
-		DrawString(_font, new Vector2(0, y), "功成之处,枯骨盈野。", HorizontalAlignment.Center, 1120, 13, new Color("8a8474")); y += 40;
+		y += 34;
+		DrawString(_font, new Vector2(0, y), $"此章,尔部埋骨边野者 {GameState.I.Bones} 人。", HorizontalAlignment.Center, 1120, 14, new Color("c8a8a0")); y += 26;
+		DrawString(_font, new Vector2(0, y), "一将功成万骨枯。", HorizontalAlignment.Center, 1120, 13, new Color("8a8474")); y += 36;
 		DrawString(_font, new Vector2(0, y), "回车 · 回主菜单", HorizontalAlignment.Center, 1120, 14, new Color("e6c25c"));
 	}
 
