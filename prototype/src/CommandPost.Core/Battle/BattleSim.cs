@@ -115,6 +115,7 @@ public sealed partial class BattleSim
         UpdateEnemyAi();
         UpdateAlliedAi();    // 友邻一路(左翼)自己会打——你救不救是另一回事
         UpdateStances();     // 我方各部按姿态自主行事(进攻扑敌/等待避战)
+        UpdateAskForOrders();// 请示求决:守势之将见敌请示,不回令则自处
         UpdateRiders();
         UpdateMission();
         AutoReports();

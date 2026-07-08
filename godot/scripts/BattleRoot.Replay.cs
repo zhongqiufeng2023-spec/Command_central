@@ -144,11 +144,20 @@ public partial class BattleRoot
 			11, new Color("9aa0a8"));
 
 		// 关键分叉点(自动标注:你以为 vs 实际)
+		float ky = 66;
 		if (_keyMoments is { Count: > 0 })
 		{
-			DrawText(new Vector2(620, 66), "—— 关键分叉(裂缝最大的时刻)——", 12, new Color("e6c25c"));
+			DrawText(new Vector2(620, ky), "—— 关键分叉(裂缝最大的时刻)——", 12, new Color("e6c25c")); ky += 20;
 			for (int i = 0; i < _keyMoments.Count; i++)
-				DrawText(new Vector2(620, 86 + i * 18), $"{i + 1}. {_keyMoments[i].Cn}", 10, new Color("c8c2b4"));
+			{ DrawText(new Vector2(620, ky), $"{i + 1}. {_keyMoments[i].Cn}", 10, new Color("c8c2b4")); ky += 18; }
+			ky += 6;
+		}
+		// 战毕才揭示的真相(传错的令……「原来是我害的」)
+		if (_sim.Reveals.Count > 0)
+		{
+			DrawText(new Vector2(620, ky), "—— 复盘揭示 ——", 12, new Color("d9917a")); ky += 20;
+			foreach (var line in _sim.Reveals.Take(6))
+			{ DrawText(new Vector2(620, ky), line, 10, new Color("c8a8a0")); ky += 18; }
 		}
 
 		// 时间轴

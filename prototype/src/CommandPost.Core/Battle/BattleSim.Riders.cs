@@ -52,6 +52,7 @@ public sealed partial class BattleSim
                 switch (r.Kind)
                 {
                     case RiderKind.Order when ById(r.TargetUnitId) is { } u && u.AliveCount > 0:
+                        GarbleOrder(r, u);                     // 去程失真:令骑可能记错话
                         ApplyOrderWithTemperament(u, r);       // 武将按脾性解读(第二层迷雾)
                         r.ReportOwn = Snapshot(u);
                         break;

@@ -76,6 +76,11 @@ public sealed class BattleUnit
     public BStance Stance = BStance.Hold;
     /// <summary>武将解读命令时的走样批注(如「贪功压前」)——真相侧不广播,军报/探问才带回。</summary>
     public string LastQuirkCn = "";
+
+    // —— 请示求决(PRD §6.4):敌当面而无战令 → 遣骑请示;不回令则按脾性自处 ——
+    public bool AwaitingReply;       // 请示已发,候中军回令
+    public bool AskedOnce;           // 本次接触已请示过(威胁散去后重置)
+    public float AskedT;
     /// <summary>最近一次受威胁(挨箭/接刃)的方位与时刻——姿态反应的依据。</summary>
     public Vec2F LastThreatPos;
     public float LastThreatT = -999f;

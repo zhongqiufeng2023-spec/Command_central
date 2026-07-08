@@ -19,15 +19,17 @@ public sealed class BDifficultyProfile
     public float AutoReportPeriod = 40f;
     /// <summary>沙盘直接叠加瞭望所见(免登台)——轻松档默认开。</summary>
     public bool SandboxWatchOverlay;
+    /// <summary>令骑记错命令的概率(去程失真,PRD §6.5)——错姿态/偏目的地,复盘才揭示。</summary>
+    public float OrderGarbleChance = 0.06f;
 
     public static BDifficultyProfile Of(BDifficulty d) => d switch
     {
         BDifficulty.Easy => new BDifficultyProfile
-        { Level = d, Cn = "轻松", InterceptMult = 0.5f, OverdueHint = true, AutoReportPeriod = 28f, SandboxWatchOverlay = true },
+        { Level = d, Cn = "轻松", InterceptMult = 0.5f, OverdueHint = true, AutoReportPeriod = 28f, SandboxWatchOverlay = true, OrderGarbleChance = 0.02f },
         BDifficulty.Hardcore => new BDifficultyProfile
-        { Level = d, Cn = "硬核", InterceptMult = 1.6f, OverdueHint = false, AutoReportPeriod = 55f, SandboxWatchOverlay = false },
+        { Level = d, Cn = "硬核", InterceptMult = 1.6f, OverdueHint = false, AutoReportPeriod = 55f, SandboxWatchOverlay = false, OrderGarbleChance = 0.12f },
         _ => new BDifficultyProfile
-        { Level = BDifficulty.Normal, Cn = "常规", InterceptMult = 1f, OverdueHint = true, AutoReportPeriod = 40f, SandboxWatchOverlay = false },
+        { Level = BDifficulty.Normal, Cn = "常规", InterceptMult = 1f, OverdueHint = true, AutoReportPeriod = 40f, SandboxWatchOverlay = false, OrderGarbleChance = 0.06f },
     };
 
     public static string DescCn(BDifficulty d) => d switch
