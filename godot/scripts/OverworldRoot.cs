@@ -25,6 +25,7 @@ public partial class OverworldRoot : Node2D
 	private static readonly Vector2 EnemyPost = new(150 * TS, 64 * TS);   // 敌军汛地:黑松岭东缘
 	private double _t0;
 	private string _banner = ""; private double _bannerAge = 99;
+	private string _pendingBanner = "";                                   // 合上卷轴后再弹(免被盖住)
 	private Font _font = null!;
 	private readonly PauseOverlay _menu = new();
 
@@ -34,7 +35,23 @@ public partial class OverworldRoot : Node2D
 	private bool _letterOpen;                                             // 谒见军令卷轴
 	private bool _ending;                                                 // 章末结算
 	private bool _warnedSighting;
+	private bool _duskPrompted;                                           // 每晚只提醒一次「歇营还是兼程」
+	private bool _grainWarned40, _grainWarned10;
+	private double _eventCd = 26;                                         // 行军人味小报冷却
+	private readonly Random _evRng = new();
 	private bool NearHq => _pos.DistanceTo(HqCamp) < 100f;
+
+	// 行军路上的人味小报(荒诞表层——Radio Commander 味)
+	private static readonly string[] MarchFlavor =
+	{
+		"塘骑来报:岭上火光十数处!……细看,是牧人烧荒。虚惊。",
+		"前哨拿住一个『虏谍』,搜出干粮三块——是邻村货郎,放了。",
+		"军中传言:虏骑有三万之众。传到第五营,变成了八万。",
+		"辎重营小校来报:骡子啃了半面认旗,请示是否记过。",
+		"斥候王二狗回报:『前面……前面全是树。』——黑松岭,确实全是树。",
+		"伙夫头儿抱怨:再赶路,腌菜坛子要颠碎第三个了。",
+		"夜里有士卒说梦话喊『杀』,惊动半营人拔刀站了一刻钟。",
+	};
 
 	private static readonly string[] Shichen = { "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥" };
 	private static float DayHour => GameState.I.CampaignHours % 24f;
@@ -136,8 +153,14 @@ public partial class OverworldRoot : Node2D
 		_moving = dir != Vector2.Zero;
 		if (_moving)
 		{
-			GameState.I.CampaignHours += dt * 1.2f;                       // 行军走表(夜行更慢,见下)
-			float speed = 130f * SpeedMult(At(_pos)) * (NightFactor > 0.6f ? 0.75f : 1f);
+			float hours = dt * 1.2f;                                      // 行军走表(夜行更慢,见下)
+			var gs = GameState.I;
+			gs.CampaignHours += hours;
+			bool night = NightFactor > 0.6f;
+			gs.Grain = Math.Max(0, gs.Grain - hours * 1.1f);              // 人吃马嚼
+			gs.Fatigue = Math.Min(100, gs.Fatigue + hours * (night ? 7f : 2.2f));   // 夜行倍疲
+
+			float speed = 130f * SpeedMult(At(_pos)) * (night ? 0.75f : 1f);
 			var next = _pos + dir.Normalized() * speed * dt;
 			next.X = Math.Clamp(next.X, 10, TW * TS - 10); next.Y = Math.Clamp(next.Y, 10, TH * TS - 10);
 			if (Passable(At(next))) _pos = next;
@@ -149,6 +172,29 @@ public partial class OverworldRoot : Node2D
 				else if (Passable(At(sy))) _pos = sy;
 			}
 			if (Mathf.Abs(dir.X) > 0.01f) _faceLeft = dir.X < 0;
+
+			// 行军人味小报(冷却随机)
+			_eventCd -= delta;
+			if (_eventCd <= 0)
+			{
+				_eventCd = 20 + _evRng.Next(22);
+				_banner = MarchFlavor[_evRng.Next(MarchFlavor.Length)]; _bannerAge = 0;
+			}
+		}
+
+		// —— 昼夜与后勤的提点 ——
+		{
+			var gs = GameState.I;
+			float h = DayHour;
+			if (h >= 17f && h < 21f && !_duskPrompted)
+			{ _duskPrompted = true; _banner = "天色向晚——R=歇营过夜(养力省粮),或趁夜兼程(慢且倍疲)。"; _bannerAge = 0; }
+			if (h >= 6f && h < 16f) _duskPrompted = false;
+			if (gs.Grain < 40f && !_grainWarned40)
+			{ _grainWarned40 = true; _banner = "粮官来报:军粮不足四成——该回帅帐领粮了。"; _bannerAge = 0; }
+			if (gs.Grain < 10f && !_grainWarned10)
+			{ _grainWarned10 = true; _banner = "粮将尽!再拖下去,士卒要枵腹而战了。"; _bannerAge = 0; }
+			if (gs.Grain >= 40f) _grainWarned40 = false;
+			if (gs.Grain >= 10f) _grainWarned10 = false;
 		}
 
 		// —— 事件:虏帐(先破当面之虏方可近前;破敌后抵达=章末)——
@@ -205,7 +251,11 @@ public partial class OverworldRoot : Node2D
 			}
 			if (_letterOpen)
 			{
-				if (k.Keycode is Key.E or Key.Escape or Key.Enter or Key.KpEnter) _letterOpen = false;
+				if (k.Keycode is Key.E or Key.Escape or Key.Enter or Key.KpEnter)
+				{
+					_letterOpen = false;
+					if (_pendingBanner != "") { _banner = _pendingBanner; _bannerAge = 0; _pendingBanner = ""; }
+				}
 				return;
 			}
 			switch (_menu.HandleKey(k, out bool consumed))
@@ -222,7 +272,37 @@ public partial class OverworldRoot : Node2D
 				GameState.I.CampOnly = true; GameState.I.Battle = null;
 				GameState.Go(this, "res://Tent.tscn");
 			}
-			else if (k.Keycode == Key.E && NearHq) { _letterOpen = true; Sfx.Play(this, Sfx.Click); }
+			else if (k.Keycode == Key.R)
+			{
+				// 歇营过夜:养力省粮——「扎营 vs 夜行」抉择的另一半
+				float h = DayHour;
+				var gs = GameState.I;
+				if (h >= 17f || h < 5f)
+				{
+					float until = h < 5f ? 6f - h : 24f - h + 6f;
+					gs.CampaignHours += until;
+					gs.Grain = Math.Max(0, gs.Grain - until * 0.4f);
+					gs.Fatigue = Math.Max(0, gs.Fatigue - 48f);
+					_banner = "安营下寨,人马饱歇——明晨卯时拔营。"; _bannerAge = 0;
+					Sfx.Play(this, Sfx.Click);
+					SyncState(); gs.SaveRun();
+				}
+				else { _banner = "白日正长,何必歇营?(黄昏后方可歇营过夜)"; _bannerAge = 0; }
+			}
+			else if (k.Keycode == Key.E && NearHq)
+			{
+				_letterOpen = true; Sfx.Play(this, Sfx.Click);
+				// 顺道领粮:粮官的「鼠耗」是这支军队的固有摩擦
+				var gs = GameState.I;
+				if (gs.Grain < 90f)
+				{
+					int got = 82 + _evRng.Next(19);
+					gs.Grain = got;
+					_pendingBanner = got < 92
+						? $"粮官王禄拨付军粮,点验短了{100 - got}分——曰:『鼠耗』。"
+						: "粮官王禄拨付军粮,足额——今儿太阳打西边出来了。";
+				}
+			}
 		}
 		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
 			_moveTarget = mb.Position - CamOffset();
@@ -312,9 +392,22 @@ public partial class OverworldRoot : Node2D
 		DrawString(_font, new Vector2(14, 24), $"大酆边野 · {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 		DrawString(_font, new Vector2(14, 44),
 			GameState.I.EnemyDefeated
-				? "虏骑已绝迹于野。C=扎营入帐 · WASD/点击=行军 · Esc=菜单"
-				: "军令:进抵黑松岭一线,试探当面之敌 | WASD/点击=行军 · C=扎营入帐(先扎营再推进,可用瞭望台) · Esc=菜单",
+				? "虏骑已绝迹于野。C=扎营入帐 · R=歇营过夜 · WASD/点击=行军 · Esc=菜单"
+				: "军令:进抵黑松岭一线,试探当面之敌 | WASD/点击=行军 · C=扎营入帐 · R=歇营过夜 · Esc=菜单",
 			HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
+
+		// 后勤条:粮草与疲惫(行军的两本账)
+		{
+			var gs = GameState.I;
+			DrawString(_font, new Vector2(14, 66), "粮草", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
+			DrawRect(new Rect2(50, 56, 96, 9), new Color(0.15f, 0.14f, 0.11f, 0.85f), true);
+			DrawRect(new Rect2(50, 56, 96 * gs.Grain / 100f, 9),
+				gs.Grain > 35 ? new Color("8fa86a") : new Color("d0894a"), true);
+			DrawString(_font, new Vector2(166, 66), "疲惫", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
+			DrawRect(new Rect2(202, 56, 96, 9), new Color(0.15f, 0.14f, 0.11f, 0.85f), true);
+			DrawRect(new Rect2(202, 56, 96 * gs.Fatigue / 100f, 9),
+				gs.Fatigue < 55 ? new Color("8a8474") : gs.Fatigue < 80 ? new Color("d0a84a") : new Color("c46a4a"), true);
+		}
 		DrawMinimap();
 
 		if (_banner != "" && _bannerAge < 4)

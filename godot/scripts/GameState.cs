@@ -31,6 +31,11 @@ public partial class GameState : Node
 	/// <summary>行军历:出征以来的时辰数(行军才走表;第一日辰时出兵)。</summary>
 	public float CampaignHours = 8f;
 
+	/// <summary>军粮 0..100:行军逐时消耗;见底则士卒枵腹入战(军心浮动)。帅帐可领粮。</summary>
+	public float Grain = 100f;
+	/// <summary>士卒疲惫 0..100:行军积累(夜行倍之),歇营过夜大减;过重则带乏入战。</summary>
+	public float Fatigue;
+
 	/// <summary>主帅信任(跨战役累积,0..100 基线 50)——每战的行营裁断向它结转。</summary>
 	public int Trust = 50;
 	/// <summary>上一战的行营裁断(帐内/大地图可回看);null=尚无战绩。</summary>
@@ -43,6 +48,17 @@ public partial class GameState : Node
 		Battle = BattleScenario.BlackPineField(_battleSeed++);
 		Battle.Difficulty = BDifficultyProfile.Of(Difficulty);
 		CampOnly = false;
+
+		// —— 行军状态带进战场:疲惫折体力,断粮动军心(大地图的抉择在这里收账)——
+		float stam = Fatigue > 80f ? 55f : Fatigue > 55f ? 72f : 100f;
+		foreach (var u in Battle.Units)
+		{
+			if (u.Side != CommandPost.Core.Side.Friend || u.Allied) continue;
+			if (stam < 100f) u.Stamina = stam;
+			if (Grain <= 0f) u.Morale = 70f;
+		}
+		if (stam < 100f) Battle.Feed(stam < 60f ? "连夜强行军,人马俱疲——各部带乏入战。" : "连日行军,士卒带乏——体力折损入战。");
+		if (Grain <= 0f) Battle.Feed("粮尽!士卒枵腹而战,军心浮动……");
 	}
 
 	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任。</summary>
@@ -75,7 +91,7 @@ public partial class GameState : Node
 		PartyPos = new Vector2(55 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
 		EnemyDefeated = false; Trust = 50; LastVerdict = null;
-		CampaignHours = 8f;
+		CampaignHours = 8f; Grain = 100f; Fatigue = 0f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
 	}
 
@@ -90,7 +106,7 @@ public partial class GameState : Node
 			["defeated"] = EnemyDefeated, ["trust"] = Trust,
 			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
 			["diff"] = (int)Difficulty,
-			["hours"] = CampaignHours,
+			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -114,6 +130,8 @@ public partial class GameState : Node
 		_battleSeed = d["seed"].AsInt32();
 		Difficulty = d.ContainsKey("diff") ? (BDifficulty)d["diff"].AsInt32() : BDifficulty.Normal;
 		CampaignHours = d.ContainsKey("hours") ? d["hours"].AsSingle() : 8f;
+		Grain = d.ContainsKey("grain") ? d["grain"].AsSingle() : 100f;
+		Fatigue = d.ContainsKey("fatigue") ? d["fatigue"].AsSingle() : 0f;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;
