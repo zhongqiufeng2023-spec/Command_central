@@ -29,6 +29,27 @@ public sealed partial class BattleSim
                 _enemyPending[f.Id] = (f.Center, Time + EnemyReactLag);                     // 发现:先入延迟队列
         }
 
+        // —— 疑兵(佯动):虚设的旌旗金鼓——敌军望见/闻声(170m,鼓声传得远),
+        //    当一支真部队记进认知;迫近 50m 即识破遁散,90s 后自行收场 ——
+        for (int i = Decoys.Count - 1; i >= 0; i--)
+        {
+            var dc = Decoys[i];
+            bool busted = Units.Any(e => e.Side == Side.Enemy && e.AliveCount > 0 && e.Center.DistanceTo(dc.Pos) < 50f);
+            if (Time >= dc.ExpireT || busted)
+            {
+                _enemyKnown.Remove(dc.FakeId); _enemyPending.Remove(dc.FakeId);
+                Decoys.RemoveAt(i);
+                Feed(busted ? "疑兵遁归:虏骑迫近,替身们扔了旗子就跑——这一趟它白跑了" : "疑兵收场:旗倒鼓歇");
+                continue;
+            }
+            bool heard = Units.Any(e => e.Side == Side.Enemy && e.AliveCount > 0 && e.Center.DistanceTo(dc.Pos) <= 170f);
+            if (!heard) continue;
+            if (_enemyKnown.TryGetValue(dc.FakeId, out var dk))
+            { if (Time - dk.seenT >= EnemyRefresh) _enemyKnown[dc.FakeId] = (dc.Pos, Time); }
+            else if (!_enemyPending.ContainsKey(dc.FakeId))
+                _enemyPending[dc.FakeId] = (dc.Pos, Time + EnemyReactLag);
+        }
+
         foreach (var kv in _enemyPending.Where(kv => Time >= kv.Value.readyT).ToList())
         { _enemyKnown[kv.Key] = (kv.Value.pos, Time); _enemyPending.Remove(kv.Key); }        // 到点 → 全军知晓
 

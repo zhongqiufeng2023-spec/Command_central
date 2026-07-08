@@ -66,6 +66,23 @@ public sealed partial class BattleSim
         Feed($"塘骑驰出:侦察 ({(int)dest.X},{(int)dest.Y})");
     }
 
+    /// <summary>
+    /// 佯动·设疑兵(蓝图§十二,简化版):遣数十老弱赍旗鼓往某处虚张声势——
+    /// 敌军望见/闻声,把它当一支真部队记进认知,循声而来却扑空。
+    /// 第一次从「被迷雾困」变「用迷雾打人」。替身走得慢、路上也会被截杀;
+    /// 敌迫近(50m)即识破遁散,或 90s 后自行收场。一战两拨。
+    /// </summary>
+    public void DispatchDecoy(Vec2F dest)
+    {
+        if (Deploying || Over || DecoysLeft <= 0) return;
+        DecoysLeft--;
+        dest = Map.NearestPassable(Map.Clamp(dest));
+        var r = NewRider(RiderKind.Decoy, BattlePath.Find(Map, HqPos, dest));
+        r.DestPoint = dest; r.Speed = 6.5f;                  // 老弱替身拖着大鼓,快不了
+        r.DescCn = "疑兵队";
+        Feed($"疑兵队出:数十老弱赍旗鼓,往 ({(int)dest.X},{(int)dest.Y}) 虚张声势(余 {DecoysLeft} 拨)");
+    }
+
     /// <summary>探问某部近况(令骑往返,带回该部即时状态)。</summary>
     public void RequestStatus(int unitId)
     {

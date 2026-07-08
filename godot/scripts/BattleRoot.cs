@@ -207,6 +207,12 @@ public partial class BattleRoot : Node2D
 
 			case MouseButton.Middle when !_sim.Over:
 				if (_sim.Deploying) { _banner = "布阵中——开战后方可遣塘骑。"; _bannerAge = 0; }
+				else if (mb.ShiftPressed)
+				{
+					if (_sim.DecoysLeft > 0)
+					{ _sim.DispatchDecoy(world); _banner = $"疑兵队出——虚张声势,诱虏扑空。(余 {_sim.DecoysLeft} 拨)"; _bannerAge = 0; Sfx.Play(this, Sfx.Drum, -8f); }
+					else { _banner = "疑兵已用罄——老弱替身就那么些人。"; _bannerAge = 0; }
+				}
 				else { _sim.DispatchScout(world); Sfx.Play(this, Sfx.Gallop); }
 				break;
 		}

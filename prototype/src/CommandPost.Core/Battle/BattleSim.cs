@@ -49,6 +49,12 @@ public sealed partial class BattleSim
     private float _sanClock;
     private int _nextPhantom = -901;
 
+    /// <summary>已张开的疑兵(佯动):虚设旌旗金鼓,污染敌方认知。</summary>
+    public List<BDecoy> Decoys { get; } = new();
+    /// <summary>疑兵队余量(老弱替身有限,一战两拨)。</summary>
+    public int DecoysLeft { get; set; } = 2;
+    private int _nextDecoy = -501;
+
     /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
     public bool Deploying { get; private set; }
     /// <summary>布阵区东界(世界米):开战前只能摆在自家地界。</summary>

@@ -62,6 +62,12 @@ public sealed partial class BattleSim
                     case RiderKind.Scout:
                         r.Phase = RiderPhase.Dwell;
                         continue;
+                    case RiderKind.Decoy:
+                        // 疑兵抵达:就地张开旌旗、擂起大鼓——人不回帐(替身们守着戏台)
+                        Decoys.Add(new BDecoy { Pos = r.Pos, ExpireT = Time + 90f, FakeId = _nextDecoy-- });
+                        Feed("疑兵已张:虚设旌旗,鼓声大作——但愿虏骑上当");
+                        r.Delivered = true;
+                        continue;
                 }
                 r.Phase = RiderPhase.Return;
                 r.Path = BattlePath.Find(Map, r.Pos, HqPos);

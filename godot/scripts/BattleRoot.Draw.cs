@@ -204,8 +204,18 @@ public partial class BattleRoot
 			if (est is { } ep)
 			{
 				DrawDiamond(ToScreen(ep), 4.5f, new Color(0.9f, 0.92f, 0.85f, 0.85f));
-				DrawText(ToScreen(ep) + new Vector2(0, -10), r.Kind == RiderKind.Scout ? "塘" : "令", 10, new Color("d8e8d0"), center: true);
+				DrawText(ToScreen(ep) + new Vector2(0, -10),
+					r.Kind switch { RiderKind.Scout => "塘", RiderKind.Decoy => "疑", _ => "令" },
+					10, new Color("d8e8d0"), center: true);
 			}
+		}
+
+		// 疑兵(你自己布的局,自然在沙盘上):虚旗虚鼓,盼虏骑扑空
+		foreach (var dc in _sim.Decoys)
+		{
+			var p = ToScreen(dc.Pos);
+			DrawDiamond(p, 12f, new Color(0.9f, 0.75f, 0.35f, 0.75f), filled: false);
+			DrawText(p + new Vector2(0, -18), "疑兵(虚张声势)", 11, new Color(0.92f, 0.8f, 0.5f, 0.85f), center: true);
 		}
 	}
 
