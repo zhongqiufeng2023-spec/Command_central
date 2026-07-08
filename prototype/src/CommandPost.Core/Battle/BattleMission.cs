@@ -83,7 +83,8 @@ public sealed class BattleMission
             if (!o.Active || o.State is BObjectiveState.Done or BObjectiveState.Failed) continue;
             if (o.Kind == BObjectiveKind.ScoutEnemy)
             {
-                int known = sim.Sandbox.Enemy.Count;
+                // 只数真有对应敌部的标记(幻影敌情 id<0 不算「侦明」——报上去也对不上号)
+                int known = sim.Sandbox.Enemy.Keys.Count(k => k >= 0);
                 o.State = known >= o.RequiredCount ? BObjectiveState.Done
                         : known > 0 ? BObjectiveState.Partial : BObjectiveState.Pending;
             }

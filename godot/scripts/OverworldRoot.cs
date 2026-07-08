@@ -159,6 +159,7 @@ public partial class OverworldRoot : Node2D
 			bool night = NightFactor > 0.6f;
 			gs.Grain = Math.Max(0, gs.Grain - hours * 1.1f);              // 人吃马嚼
 			gs.Fatigue = Math.Min(100, gs.Fatigue + hours * (night ? 7f : 2.2f));   // 夜行倍疲
+			if (gs.Grain <= 0f) gs.San = Math.Max(0, gs.San - hours * 0.9f);        // 枵腹行军,心神俱疲
 
 			float speed = 130f * SpeedMult(At(_pos)) * (night ? 0.75f : 1f);
 			var next = _pos + dir.Normalized() * speed * dt;
@@ -283,6 +284,7 @@ public partial class OverworldRoot : Node2D
 					gs.CampaignHours += until;
 					gs.Grain = Math.Max(0, gs.Grain - until * 0.4f);
 					gs.Fatigue = Math.Max(0, gs.Fatigue - 48f);
+					gs.San = Math.Min(100, gs.San + 5f);                  // 一夜安枕,心神稍复
 					_banner = "安营下寨,人马饱歇——明晨卯时拔营。"; _bannerAge = 0;
 					Sfx.Play(this, Sfx.Click);
 					SyncState(); gs.SaveRun();
@@ -407,6 +409,10 @@ public partial class OverworldRoot : Node2D
 			DrawRect(new Rect2(202, 56, 96, 9), new Color(0.15f, 0.14f, 0.11f, 0.85f), true);
 			DrawRect(new Rect2(202, 56, 96 * gs.Fatigue / 100f, 9),
 				gs.Fatigue < 55 ? new Color("8a8474") : gs.Fatigue < 80 ? new Color("d0a84a") : new Color("c46a4a"), true);
+			DrawString(_font, new Vector2(318, 66), "心神", HorizontalAlignment.Left, -1, 12, new Color("9aa0a8"));
+			DrawRect(new Rect2(354, 56, 96, 9), new Color(0.15f, 0.14f, 0.11f, 0.85f), true);
+			DrawRect(new Rect2(354, 56, 96 * gs.San / 100f, 9),
+				gs.San >= 60 ? new Color("8fa8a0") : gs.San >= 35 ? new Color("b08ab0") : new Color("9a5a9a"), true);
 		}
 		DrawMinimap();
 

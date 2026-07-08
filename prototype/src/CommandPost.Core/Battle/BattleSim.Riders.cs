@@ -95,7 +95,7 @@ public sealed partial class BattleSim
             float dist = e.Center.DistanceTo(r.Pos);
             float range = (r.Kind == RiderKind.Scout ? 130f : 100f) * BattleMap.ConcealMult(Map.At(e.Center));
             if (dist > range) continue;
-            float err = Math.Clamp(dist / (r.Phase == RiderPhase.Dwell ? 500f : 300f), 0.05f, 0.35f);
+            float err = Math.Clamp(dist / (r.Phase == RiderPhase.Dwell ? 500f : 300f) * SanFactor, 0.05f, 0.6f);
             int est = Math.Max(10, (int)Math.Round(e.AliveCount * (1 + ((float)_rng.NextDouble() * 2 - 1) * err) / 10f) * 10);
             UnitType? type = dist < 90f || r.Phase == RiderPhase.Dwell ? e.Type : null;
             if (!r.Sightings.TryGetValue(e.Id, out var old) || Time > old.T)
@@ -193,7 +193,7 @@ public sealed partial class BattleSim
                 {
                     float dist = e.Center.DistanceTo(u.Center);
                     if (dist > 95f * BattleMap.ConcealMult(Map.At(e.Center))) continue;
-                    float err = Math.Clamp(dist / 300f, 0.05f, 0.3f);
+                    float err = Math.Clamp(dist / 300f * SanFactor, 0.05f, 0.55f);
                     int est = Math.Max(10, (int)Math.Round(e.AliveCount * (1 + ((float)_rng.NextDouble() * 2 - 1) * err) / 10f) * 10);
                     r.Sightings[e.Id] = new EnemySighting(e.Center, est, dist < 80f ? e.Type : null, Time);
                 }

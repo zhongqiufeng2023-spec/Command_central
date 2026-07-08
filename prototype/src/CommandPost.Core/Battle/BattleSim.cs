@@ -43,6 +43,12 @@ public sealed partial class BattleSim
     public BattleReplay Replay { get; } = new();
     private float _replayClock = 1f;   // 首帧在开战第一秒落下
 
+    /// <summary>SAN→失真系数(蓝图§4.5 试水):1=清明;越高,回报误差越大、沙盘越可能长出幻影敌情。
+    /// 心态崩了,你眼里的战场就更假——SAN 与迷雾母题双向绑定。</summary>
+    public float SanFactor { get; set; } = 1f;
+    private float _sanClock;
+    private int _nextPhantom = -901;
+
     /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
     public bool Deploying { get; private set; }
     /// <summary>布阵区东界(世界米):开战前只能摆在自家地界。</summary>
@@ -118,6 +124,7 @@ public sealed partial class BattleSim
         UpdateAskForOrders();// 请示求决:守势之将见敌请示,不回令则自处
         UpdateRiders();
         UpdateMission();
+        UpdateSanPhantoms(); // SAN 低:沙盘自己长出不存在的敌人
         AutoReports();
         UpdateUnits();
         RebuildHash();
@@ -126,6 +133,26 @@ public sealed partial class BattleSim
         RemoveDead();
         CheckBattleEnd();
         RecordReplayFrame();   // 放在胜负判定后:战毕那一刻的收尾帧也录上
+    }
+
+    /// <summary>SAN 试水(蓝图§4.5):SanFactor ≥ 1.3 时,每隔一阵可能凭空长出一条「幻影敌情」——
+    /// 惊慌的塘骑、熬红的眼、只存在于你沙盘上的虏骑。真相无此人;复盘才揭示。</summary>
+    private void UpdateSanPhantoms()
+    {
+        if (SanFactor < 1.3f) return;
+        _sanClock += Dt;
+        if (_sanClock < 20f) return;
+        _sanClock = 0;
+        if (!_rng.Chance(0.28 * (SanFactor - 1.2f))) return;
+
+        float ang = (float)(_rng.NextDouble() * Math.PI) - MathF.PI / 2f;    // 东半面某向
+        float dist = 180f + (float)_rng.NextDouble() * 220f;
+        var pos = Map.Clamp(HqPos + new Vec2F(MathF.Cos(ang) * dist, MathF.Sin(ang) * dist * 0.8f));
+        int est = (10 + (int)(_rng.NextDouble() * 25)) * 10;
+        int id = _nextPhantom--;
+        Sandbox.Enemy[id] = new SandboxEnemyMark { UnitId = id, Pos = pos, Est = est, Type = null, T = Time };
+        Alerts.Add(new Alert((int)Time, $"塘骑惊报:又见虏骑!约{est}众,不知何部……", true));
+        Reveals.Add($"{FormatT(Time)} 那支「约{est}众」的虏骑从未存在——心神耗尽时,沙盘也会骗你");
     }
 
     /// <summary>逐秒录一帧(战毕再补一帧收尾)。内存量级:20 分钟 ≈ 1200 帧,忽略不计。</summary>

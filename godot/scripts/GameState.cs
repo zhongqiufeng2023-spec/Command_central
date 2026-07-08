@@ -40,6 +40,10 @@ public partial class GameState : Node
 	public int Trust = 50;
 	/// <summary>万骨账:出征以来尔部阵亡将士累计——功业是用这个数堆出来的。</summary>
 	public int Bones;
+
+	/// <summary>心神(SAN)0..100:败绩/折损/断粮磨蚀,胜利/歇营回补。
+	/// 低了不加数值惩罚——加「不可信」:回报误差变大,沙盘会长出幻影敌情(蓝图§4.5)。</summary>
+	public float San = 75f;
 	/// <summary>上一战的行营裁断(帐内/大地图可回看);null=尚无战绩。</summary>
 	public Appraisal? LastVerdict;
 
@@ -61,6 +65,11 @@ public partial class GameState : Node
 		}
 		if (stam < 100f) Battle.Feed(stam < 60f ? "连夜强行军,人马俱疲——各部带乏入战。" : "连日行军,士卒带乏——体力折损入战。");
 		if (Grain <= 0f) Battle.Feed("粮尽!士卒枵腹而战,军心浮动……");
+
+		// SAN→失真:心神耗蚀,你收到的每一份回报都更不可信
+		Battle.SanFactor = San >= 60f ? 1f : San >= 35f ? 1.4f : 1.8f;
+		if (San < 35f) Battle.Feed("你已多日不得安枕。帐外每一声马嘶,听着都像虏骑。");
+		else if (San < 60f) Battle.Feed("心神耗蚀——今日回报的数目,未必可尽信。");
 	}
 
 	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任;阵亡入万骨账。</summary>
@@ -73,9 +82,15 @@ public partial class GameState : Node
 			Trust = System.Math.Clamp(Trust + (v.Trust - 50), 0, 100);
 		}
 		if (Battle != null)
+		{
 			foreach (var u in Battle.Units)
 				if (u.Side == CommandPost.Core.Side.Friend && !u.Allied)
 					Bones += System.Math.Max(0, u.MaxCount - u.AliveCount - u.Fled);
+			// 心神结转:胜可回血,败与折损都是磨蚀
+			float swing = Battle.Winner == CommandPost.Core.Side.Friend ? 10f
+						: Battle.Winner == CommandPost.Core.Side.Enemy ? -15f : -5f;
+			San = System.Math.Clamp(San + swing - Battle.FriendLossFrac * 20f, 0f, 100f);
+		}
 		Battle = null;
 		CampOnly = true;
 	}
@@ -97,7 +112,7 @@ public partial class GameState : Node
 		PartyPos = new Vector2(55 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
-		CampaignHours = 8f; Grain = 100f; Fatigue = 0f;
+		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
 	}
 
@@ -113,7 +128,7 @@ public partial class GameState : Node
 			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
 			["diff"] = (int)Difficulty,
 			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
-			["bones"] = Bones,
+			["bones"] = Bones, ["san"] = San,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -140,6 +155,7 @@ public partial class GameState : Node
 		Grain = d.ContainsKey("grain") ? d["grain"].AsSingle() : 100f;
 		Fatigue = d.ContainsKey("fatigue") ? d["fatigue"].AsSingle() : 0f;
 		Bones = d.ContainsKey("bones") ? d["bones"].AsInt32() : 0;
+		San = d.ContainsKey("san") ? d["san"].AsSingle() : 75f;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;
