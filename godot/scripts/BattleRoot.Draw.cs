@@ -128,6 +128,10 @@ public partial class BattleRoot
 				new Color(0.85f, 0.75f, 0.45f, 0.5f), center: true);
 		}
 
+		// 旗鼓声程(以帐为圆心的固定圈——这圈内,你的话是即时的)
+		DrawArc(ToScreen(_sim.HqPos), BattleSim.SignalRange * _zoom, 0, Mathf.Tau, 72,
+			new Color(0.8f, 0.65f, 0.35f, 0.14f), 1.2f, true);
+
 		// 信息旗
 		foreach (var f in _sim.Sandbox.Flags)
 		{

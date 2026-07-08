@@ -77,6 +77,49 @@ public sealed partial class BattleSim
         Feed($"令骑驰出:探问 {u.Name} 近况");
     }
 
+    /// <summary>旗鼓声程(米):以帅帐为圆心;林中阻声打折。</summary>
+    public const float SignalRange = 280f;
+
+    /// <summary>
+    /// 旗鼓通道(蓝图§九,《孙子·军争》「言不相闻,故为金鼓」):中军擂鼓/鸣金/竖旗——
+    /// 近即时、带宽低(只传姿态)、**绝对照令**(耳只听金鼓,不过武将解读);
+    /// 只及声程(林中打折),声程边缘会**误读**(听岔的入 Reveals,复盘才知);
+    /// 且**敌军也听得见**:声程内虏骑当即知晓左近我军方位——军令泄露是旗鼓的价钱。
+    /// 返回闻令部数(测试用;战中不呈现——鼓声出帐,谁听见了你看不见)。
+    /// </summary>
+    public int SoundSignal(BStance stance)
+    {
+        if (Deploying || Over) return 0;
+        int heard = 0;
+        foreach (var u in Units.Where(x => x is { Side: Side.Friend, Allied: false, AiControlled: false } && x.Controllable))
+        {
+            float r = SignalRange * (Map.At(u.Center) == BTerrain.Forest ? 0.6f : 1f);
+            float d = u.Center.DistanceTo(HqPos);
+            if (d > r) continue;
+            heard++;
+            var eff = stance;
+            if (d > r * 0.75f && _rng.Chance(0.25))
+            {
+                BStance[] all = { BStance.Attack, BStance.Hold, BStance.Standby };
+                eff = all[(int)(_rng.NextDouble() * all.Length)];
+                if (eff != stance)
+                    Reveals.Add($"{FormatT(Time)} {u.Name}在声程边缘听岔了:「{SignalCn(stance)}」听成「{StanceCnOf(eff)}」");
+            }
+            u.Stance = eff;                    // 旗鼓=绝对照令(戚继光:耳只听金鼓,眼只看旗帜)
+            u.AwaitingReply = false;
+            u.LastQuirkCn = "";
+        }
+        // 军令泄露:声程内的敌部也听见了——当即知晓其左近我军方位(免延迟)
+        foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AliveCount > 0 && x.Center.DistanceTo(HqPos) < SignalRange))
+            foreach (var f in Units.Where(x => x.Side == Side.Friend && x.AliveCount > 0 && x.Center.DistanceTo(e.Center) < 160f))
+                _enemyKnown[f.Id] = (f.Center, Time);
+        Feed($"中军{SignalCn(stance)}——鼓角出帐,声程内各部当即照令(虏骑亦闻)");
+        return heard;
+    }
+
+    public static string SignalCn(BStance s) => s switch
+    { BStance.Attack => "擂鼓(进)", BStance.Standby => "鸣金(退)", _ => "竖旗(守)" };
+
     /// <summary>沙盘放置信息旗(纯标注,即时)。</summary>
     public void PlaceFlag(Vec2F p, string? label = null)
         => Sandbox.Flags.Add(new FlagMarker { Pos = Map.Clamp(p), Label = label ?? $"旗{_nextFlag++}" });

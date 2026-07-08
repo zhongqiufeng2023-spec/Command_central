@@ -138,6 +138,9 @@ public partial class BattleRoot : Node2D
 			case Key.Key2: SendStance(BStance.Hold); break;
 			case Key.Key3: SendStance(BStance.Standby); break;
 			case Key.Key4: SendStance(BStance.Skirmish); break;
+			case Key.Key5: SoundSignal(BStance.Attack, Sfx.Drum); break;
+			case Key.Key6: SoundSignal(BStance.Standby, Sfx.Horn); break;
+			case Key.Key7: SoundSignal(BStance.Hold, Sfx.Alert); break;
 			case Key.F1:
 				if (GameState.I != null)
 				{
@@ -207,6 +210,17 @@ public partial class BattleRoot : Node2D
 				else { _sim.DispatchScout(world); Sfx.Play(this, Sfx.Gallop); }
 				break;
 		}
+		QueueRedraw();
+	}
+
+	/// <summary>旗鼓:近处即时、绝对照令、敌亦可闻(声程圈见沙盘)。</summary>
+	private void SoundSignal(BStance st, AudioStreamWav sfx)
+	{
+		if (_sim.Over || _sim.Deploying) return;
+		_sim.SoundSignal(st);
+		_banner = $"中军{BattleSim.SignalCn(st)}——声程内各部即刻照令;虏骑也听见了。";
+		_bannerAge = 0;
+		Sfx.Play(this, sfx, -3f);
 		QueueRedraw();
 	}
 
