@@ -36,6 +36,9 @@ public sealed partial class BattleSim
     /// <summary>瞭望台:帅帐望楼的实时视界半径(低保真、只在范围内、不留记忆)。</summary>
     public float WatchtowerRange { get; set; } = 180f;
 
+    /// <summary>难度参数向量(信息丰度旋钮,PRD §11)。</summary>
+    public BDifficultyProfile Difficulty { get; set; } = BDifficultyProfile.Of(BDifficulty.Normal);
+
     /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
     public bool Deploying { get; private set; }
     /// <summary>布阵区东界(世界米):开战前只能摆在自家地界。</summary>
@@ -60,12 +63,13 @@ public sealed partial class BattleSim
 
     public BattleUnit? ById(int id) => _byId.TryGetValue(id, out var u) ? u : null;
 
-    public BattleUnit AddUnit(Side side, UnitType type, string name, Commander officer, Vec2F center, int count, bool ai = false)
+    public BattleUnit AddUnit(Side side, UnitType type, string name, Commander officer, Vec2F center, int count, bool ai = false, bool allied = false)
     {
         var u = new BattleUnit
         {
             Id = _nextUnit++, Side = side, Type = type, Name = name, Officer = officer,
-            Center = Map.Clamp(center), MaxCount = count, AiControlled = ai,
+            Center = Map.Clamp(center), MaxCount = count, AiControlled = ai || allied, Allied = allied,
+            Anchor = Map.Clamp(center),
             Facing = side == Side.Friend ? new Vec2F(1, 0) : new Vec2F(-1, 0),
             ReportClock = 20f + (_nextUnit % 5) * 4f      // 错峰:别全军同刻发军报
         };
@@ -78,7 +82,7 @@ public sealed partial class BattleSim
                 CoolT = (float)_rng.NextDouble()
             });
         Units.Add(u); _byId[u.Id] = u;
-        if (side == Side.Friend)
+        if (side == Side.Friend && !allied)
             Sandbox.Own[u.Id] = new SandboxOwnMark { UnitId = u.Id, Pos = u.Center, Count = count, StateCn = "就位", T = 0 };
         return u;
     }
@@ -105,6 +109,7 @@ public sealed partial class BattleSim
         Time += Dt;
         UpdateEnemyKnowledge();
         UpdateEnemyAi();
+        UpdateAlliedAi();    // 友邻一路(左翼)自己会打——你救不救是另一回事
         UpdateStances();     // 我方各部按姿态自主行事(进攻扑敌/等待避战)
         UpdateRiders();
         UpdateMission();
@@ -115,6 +120,22 @@ public sealed partial class BattleSim
         UpdateArrows();
         RemoveDead();
         CheckBattleEnd();
+    }
+
+    /// <summary>左翼(友邻一路)是否已崩:折损逾六成五,或全员失序——一支残队独存不算「左翼尚在」。</summary>
+    public bool LeftWingCollapsed
+    {
+        get
+        {
+            int start = 0, alive = 0; bool any = false, standing = false;
+            foreach (var u in Units)
+            {
+                if (!u.Allied) continue;
+                any = true; start += u.MaxCount; alive += u.AliveCount;
+                if (u.Controllable) standing = true;
+            }
+            return any && (alive < start * 0.35f || !standing);
+        }
     }
 
     // —— 瞭望台:帅帐望楼此刻所见(不写入沙盘、不留记忆;渲染层直接读)——
@@ -147,7 +168,17 @@ public sealed partial class BattleSim
         if (_endClock < 1.5f) return;
         _endClock = 0;
         if (!Units.Any(u => u.Side == Side.Friend) || !Units.Any(u => u.Side == Side.Enemy)) return;   // 没有两军就没有胜负
-        bool friendStands = Units.Any(u => u.Side == Side.Friend && u.Controllable);
+
+        // 硬性败之一:左翼(友邻一路)崩溃——指挥中枢侧翼洞开,全线不可守(关卡文档 §6)
+        if (LeftWingCollapsed)
+        {
+            Over = true; Winner = Side.Enemy;
+            Alerts.Add(new Alert((int)Time, "左翼崩溃!虏骑自北而下,全线动摇——败局已定。", true));
+            Mission?.Finish(this);
+            return;
+        }
+
+        bool friendStands = Units.Any(u => u.Side == Side.Friend && !u.Allied && u.Controllable);
         bool enemyStands = Units.Any(u => u.Side == Side.Enemy && u.Controllable);
         if (friendStands && enemyStands) return;
         Over = true;

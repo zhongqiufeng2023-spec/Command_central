@@ -11,7 +11,7 @@ public sealed partial class BattleSim
     /// <summary>布阵:把本方某部搬到布阵区内某处(士兵齐齐落位,沙盘即时同步——你亲眼看着他们站好)。</summary>
     public bool DeployMove(int unitId, Vec2F pos)
     {
-        if (!Deploying || ById(unitId) is not { Side: Side.Friend } u) return false;
+        if (!Deploying || ById(unitId) is not { Side: Side.Friend, Allied: false } u) return false;
         pos = Map.Clamp(pos);
         if (pos.X > DeployZoneMaxX) pos = new Vec2F(DeployZoneMaxX, pos.Y);
         pos = Map.NearestPassable(pos);
@@ -24,7 +24,7 @@ public sealed partial class BattleSim
     /// <summary>布阵:当面吩咐姿态(不费令骑)。</summary>
     public void DeployStance(int unitId, BStance st)
     {
-        if (!Deploying || ById(unitId) is not { Side: Side.Friend } u) return;
+        if (!Deploying || ById(unitId) is not { Side: Side.Friend, Allied: false } u) return;
         u.Stance = st;
         if (Sandbox.Own.TryGetValue(unitId, out var mk)) mk.StateCn = $"{u.StanceCn}·列阵";
     }
@@ -32,7 +32,7 @@ public sealed partial class BattleSim
     /// <summary>下令:令骑从帅帐出发,循「沙盘上次所报位置」去找该部(途中按战场旗号校向真实位置)。</summary>
     public void IssueMove(int unitId, Vec2F dest, bool run)
     {
-        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend || u.AliveCount == 0) return;
+        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend || u.Allied || u.AliveCount == 0) return;
         dest = Map.NearestPassable(Map.Clamp(dest));
         var start = Sandbox.Own.TryGetValue(unitId, out var mk) ? mk.Pos : u.Center;
         var r = NewRider(RiderKind.Order, BattlePath.Find(Map, HqPos, start));
@@ -44,7 +44,7 @@ public sealed partial class BattleSim
     /// <summary>下姿态令(进攻/据守/等待):同样由令骑送达,部队此后按姿态自主行事。</summary>
     public void IssueStance(int unitId, BStance stance)
     {
-        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend || u.AliveCount == 0) return;
+        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend || u.Allied || u.AliveCount == 0) return;
         var start = Sandbox.Own.TryGetValue(unitId, out var mk) ? mk.Pos : u.Center;
         var r = NewRider(RiderKind.Order, BattlePath.Find(Map, HqPos, start));
         r.TargetUnitId = unitId; r.OrderStance = stance;
@@ -69,7 +69,7 @@ public sealed partial class BattleSim
     /// <summary>探问某部近况(令骑往返,带回该部即时状态)。</summary>
     public void RequestStatus(int unitId)
     {
-        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend) return;
+        if (Deploying || ById(unitId) is not { } u || u.Side != Side.Friend || u.Allied) return;
         var start = Sandbox.Own.TryGetValue(unitId, out var mk) ? mk.Pos : u.Center;
         var r = NewRider(RiderKind.Query, BattlePath.Find(Map, HqPos, start));
         r.TargetUnitId = unitId;

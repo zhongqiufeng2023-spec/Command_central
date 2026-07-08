@@ -13,17 +13,20 @@ public sealed partial class BattleSim
         {
             if (r.Delivered || r.Lost)
             {
-                // 截杀 = 纯沉默:超时才给「未归」提示
+                // 截杀 = 纯沉默:超时才给「未归」提示(硬核档连提示也没有——你自己记着谁没回来)
                 if (r.Lost && !r.OverdueAlerted && Time > r.ExpectedBack)
-                { r.OverdueAlerted = true; Alerts.Add(new Alert((int)Time, $"{r.DescCn} 迟迟未归……", true)); }
+                {
+                    r.OverdueAlerted = true;
+                    if (Difficulty.OverdueHint) Alerts.Add(new Alert((int)Time, $"{r.DescCn} 迟迟未归……", true));
+                }
                 continue;
             }
 
             RecordRiderSightings(r);
 
-            // 截杀风险:身边 40m 有敌部
+            // 截杀风险:身边 40m 有敌部(难度调倍率)
             foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AliveCount > 0))
-                if (e.Center.DistanceTo(r.Pos) < 40f && _rng.Chance(0.015 * Dt)) { r.Lost = true; break; }
+                if (e.Center.DistanceTo(r.Pos) < 40f && _rng.Chance(0.015 * Dt * Difficulty.InterceptMult)) { r.Lost = true; break; }
             if (r.Lost) continue;
 
             // 送令/探问:目标部队在动,途中校向真实位置(战场上循旗而行)
@@ -49,8 +52,7 @@ public sealed partial class BattleSim
                 switch (r.Kind)
                 {
                     case RiderKind.Order when ById(r.TargetUnitId) is { } u && u.AliveCount > 0:
-                        if (r.OrderStance is { } st) u.Stance = st;
-                        if (r.HasMove) u.SetOrderDirect(r.OrderDest, r.OrderRun, Map);
+                        ApplyOrderWithTemperament(u, r);       // 武将按脾性解读(第二层迷雾)
                         r.ReportOwn = Snapshot(u);
                         break;
                     case RiderKind.Query when ById(r.TargetUnitId) is { } q && q.AliveCount > 0:
@@ -98,9 +100,30 @@ public sealed partial class BattleSim
             if (!r.Sightings.TryGetValue(e.Id, out var old) || Time > old.T)
                 r.Sightings[e.Id] = new EnemySighting(e.Center, est, type, Time);
         }
+        // 友邻(左翼)也看在眼里:塘骑路过就能带回李嵩部的战况
+        foreach (var a in Units.Where(x => x.Allied && x.AliveCount > 0))
+        {
+            float dist = a.Center.DistanceTo(r.Pos);
+            if (dist > (r.Kind == RiderKind.Scout ? 130f : 100f) * BattleMap.ConcealMult(Map.At(a.Center))) continue;
+            int est = Math.Max(10, (int)Math.Round(a.AliveCount / 10f) * 10);
+            if (!r.AllySightings.TryGetValue(a.Id, out var old) || Time > old.T)
+                r.AllySightings[a.Id] = new AllySighting(a.Center, est, AllyStateCn(a), Time);
+        }
     }
 
-    private OwnStatus Snapshot(BattleUnit u) => new(u.Id, u.Center, u.AliveCount, $"{u.StanceCn}·{u.StateCn}", Time);
+    /// <summary>旁观者眼里的友邻战况判语(不是精确内情,是一眼印象)。</summary>
+    private static string AllyStateCn(BattleUnit a) => a.State switch
+    {
+        BUnitState.Engaged => "酣战",
+        BUnitState.Wavering => "势危",
+        BUnitState.Routing => "将崩",
+        BUnitState.Shattered or BUnitState.Destroyed => "已溃",
+        _ => "守御"
+    };
+
+    private OwnStatus Snapshot(BattleUnit u) =>
+        new(u.Id, u.Center, u.AliveCount,
+            $"{u.StanceCn}·{u.StateCn}{(u.LastQuirkCn != "" ? $"〔{u.LastQuirkCn}〕" : "")}", Time);
 
     /// <summary>骑手回帐:所携情报并入沙盘(信息年龄 = 采集时刻,不是送达时刻)。</summary>
     private void MergeRiderIntel(Rider r)
@@ -124,14 +147,25 @@ public sealed partial class BattleSim
             else
                 Feed($"敌情更新:{ty}约{em.Est} @({(int)em.Pos.X},{(int)em.Pos.Y})");
         }
-        if (r.Kind == RiderKind.Scout && r.Sightings.Count == 0)
+        foreach (var (aid, s) in r.AllySightings)
+        {
+            bool isNew = !Sandbox.Ally.TryGetValue(aid, out var am);
+            if (isNew) am = Sandbox.Ally[aid] = new SandboxAllyMark { UnitId = aid };
+            if (s.T >= am!.T)
+            { am.Pos = s.Pos; am.Est = s.Est; am.StateCn = s.StateCn; am.T = s.T; am.SourceCn = r.DescCn; }
+            var au = ById(aid);
+            Feed($"左翼所见:{au?.Officer.Name}部约{s.Est}人,{s.StateCn}");
+        }
+        if (r.ArriveAlertCn is { } cry)
+            Alerts.Add(new Alert((int)Time, cry, true));
+        if (r.Kind == RiderKind.Scout && r.Sightings.Count == 0 && r.AllySightings.Count == 0)
             Feed("塘骑归:所探之处未见敌踪");
     }
 
     // —— 军报(部队自发:定期 + 事件)——
     private void AutoReports()
     {
-        foreach (var u in Units.Where(x => x.Side == Side.Friend && x.AliveCount > 0))
+        foreach (var u in Units.Where(x => x.Side == Side.Friend && !x.Allied && x.AliveCount > 0))
         {
             u.ReportClock -= Dt;
             u.EventCooldown -= Dt;
@@ -143,7 +177,7 @@ public sealed partial class BattleSim
 
             if (u.ReportClock <= 0 || (evt && u.EventCooldown <= 0))
             {
-                u.ReportClock = 40f;
+                u.ReportClock = Difficulty.AutoReportPeriod;
                 u.EventCooldown = 15f;
                 var r = new Rider
                 {
@@ -161,6 +195,13 @@ public sealed partial class BattleSim
                     float err = Math.Clamp(dist / 300f, 0.05f, 0.3f);
                     int est = Math.Max(10, (int)Math.Round(e.AliveCount * (1 + ((float)_rng.NextDouble() * 2 - 1) * err) / 10f) * 10);
                     r.Sightings[e.Id] = new EnemySighting(e.Center, est, dist < 80f ? e.Type : null, Time);
+                }
+                // 在左翼战地的本部,军报顺带捎回李嵩部战况
+                foreach (var a in Units.Where(x => x.Allied && x.AliveCount > 0))
+                {
+                    float dist = a.Center.DistanceTo(u.Center);
+                    if (dist > 95f * BattleMap.ConcealMult(Map.At(a.Center))) continue;
+                    r.AllySightings[a.Id] = new AllySighting(a.Center, Math.Max(10, (int)Math.Round(a.AliveCount / 10f) * 10), AllyStateCn(a), Time);
                 }
                 Riders.Add(r);
             }

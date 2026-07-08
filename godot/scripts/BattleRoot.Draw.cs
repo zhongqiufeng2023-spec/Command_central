@@ -75,7 +75,9 @@ public partial class BattleRoot
 			bool friend = u.Side == Side.Friend;
 			bool broken = u.State is BUnitState.Routing or BUnitState.Shattered;
 			float r = Mathf.Max(1.3f, 1.05f * _zoom);
-			Color body = friend ? new Color(0.72f, 0.26f, 0.20f) : new Color(0.32f, 0.45f, 0.62f);
+			Color body = friend
+				? (u.Allied ? new Color(0.88f, 0.58f, 0.22f) : new Color(0.72f, 0.26f, 0.20f))   // 友邻(左翼)橙,本路红
+				: new Color(0.32f, 0.45f, 0.62f);
 			if (broken) body = new Color(body.R, body.G, body.B, 0.45f + 0.2f * Mathf.Sin((float)_sim.Time * 6f));
 
 			foreach (var s in u.Soldiers)
@@ -84,7 +86,7 @@ public partial class BattleRoot
 			// 队旗:名+存员+士气条+状态
 			var c = ToScreen(u.Center);
 			DrawText(c + new Vector2(0, -16 - 8 * _zoom), $"{u.Name} {u.AliveCount}", 12,
-				friend ? new Color("ffd9a0") : new Color("bcd2ec"), center: true);
+				u.Allied ? new Color("ffc98a") : friend ? new Color("ffd9a0") : new Color("bcd2ec"), center: true);
 			float w = 40;
 			DrawRect(new Rect2(c.X - w / 2, c.Y - 12 - 8 * _zoom, w, 3), new Color(0, 0, 0, 0.6f), true);
 			DrawRect(new Rect2(c.X - w / 2, c.Y - 12 - 8 * _zoom, w * u.Morale / 100f, 3),
@@ -161,6 +163,21 @@ public partial class BattleRoot
 			DrawText(p + new Vector2(0, -18), $"{u.Name} 约{(watched ? u.AliveCount : mk.Count)}", 12, new Color("ffe0b0"), center: true);
 			DrawText(p + new Vector2(0, 14), watched ? $"{u.StanceCn}·{u.StateCn}·望见" : $"{mk.StateCn}·{(int)age}s前", 10,
 				watched ? new Color("e8d9a0") : new Color("c8bfa8"), center: true);
+		}
+
+		// 左翼友邻(李嵩部):送到手上的战况标记——不归你辖,救不救是你的抉择
+		foreach (var am in _sim.Sandbox.Ally.Values)
+		{
+			float age = now - am.T;
+			float a = Mathf.Clamp(0.95f - age / 120f * 0.6f, 0.3f, 0.95f);
+			var p = ToScreen(am.Pos);
+			var col = new Color(0.92f, 0.62f, 0.28f, a);
+			DrawRect(new Rect2(p - new Vector2(9, 9), new Vector2(18, 18)), col, false, 2f);
+			string title = am.UnitId < 0
+				? "左翼李嵩部(行营所报)"
+				: $"左翼·{_sim.ById(am.UnitId)?.Officer.Name}部 约{am.Est}";
+			DrawText(p + new Vector2(0, -18), title, 12, new Color(0.95f, 0.78f, 0.5f, a), center: true);
+			DrawText(p + new Vector2(0, 14), $"{am.StateCn}·{(int)age}s前", 10, new Color(0.85f, 0.8f, 0.65f, a), center: true);
 		}
 
 		// 望楼实见的敌部(实时亮菱形,只报约数)

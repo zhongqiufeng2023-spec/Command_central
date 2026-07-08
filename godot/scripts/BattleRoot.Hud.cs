@@ -22,10 +22,13 @@ public partial class BattleRoot
 		{
 			var u = _sim.ById(_selectedId);
 			DrawText(new Vector2(880, 70), $"已选:{u?.Name}", 14, new Color("e6c25c"));
-			DrawText(new Vector2(880, 92), $"所报兵力 约{mk.Count}", 12, new Color("d8d2c4"));
-			DrawText(new Vector2(880, 110), $"所报状态 {mk.StateCn}", 12, new Color("d8d2c4"));
-			DrawText(new Vector2(880, 128), $"报于 {(int)(_sim.Time - mk.T)}s 前", 12, new Color("c8bfa8"));
-			DrawText(new Vector2(880, 150), "右键=遣令骑传令", 11, new Color("9aa0a8"));
+			if (u != null)
+				DrawText(new Vector2(880, 90), $"武将 {u.Officer.Name}({BattleSim.PersonalityCn(u.Officer.Personality)})", 12,
+					u.Officer.Personality == Personality.Steady ? new Color("b8c8a8") : new Color("e0b070"));
+			DrawText(new Vector2(880, 108), $"所报兵力 约{mk.Count}", 12, new Color("d8d2c4"));
+			DrawText(new Vector2(880, 126), $"所报状态 {mk.StateCn}", 12, new Color("d8d2c4"));
+			DrawText(new Vector2(880, 144), $"报于 {(int)(_sim.Time - mk.T)}s 前", 12, new Color("c8bfa8"));
+			DrawText(new Vector2(880, 164), "右键=遣令骑传令", 11, new Color("9aa0a8"));
 		}
 	}
 
@@ -47,7 +50,7 @@ public partial class BattleRoot
 				case BObjectiveState.Partial: mark = "◐"; c = new Color("e6c25c"); break;
 				default:
 					mark = "・";
-					c = o.Kind is BObjectiveKind.DefeatEnemy or BObjectiveKind.PreserveArmy
+					c = o.Kind is BObjectiveKind.DefeatEnemy or BObjectiveKind.PreserveArmy or BObjectiveKind.RelieveAlly
 						? new Color("9aa0a8") : new Color("d8d2c4");   // 真相类:战毕方知
 					break;
 			}
@@ -86,16 +89,28 @@ public partial class BattleRoot
 		DrawRect(box, new Color("d9b34a"), false, 2f);
 
 		float x = box.Position.X + 30, y = box.Position.Y + 38;
+		bool leftCollapsed = _sim.LeftWingCollapsed;
 		string title = _sim.Winner == Side.Friend ? "捷!虏骑溃走"
-					 : _sim.Winner == Side.Enemy ? "败绩……全军溃散" : "战罢——虏骑遁去";
+					 : _sim.Winner == Side.Enemy ? (leftCollapsed ? "败绩……左翼崩覆" : "败绩……全军溃散")
+					 : "战罢——虏骑遁去";
 		DrawText(new Vector2(x, y), $"战毕 —— {title}", 18, new Color("e6c25c")); y += 32;
 
 		DrawText(new Vector2(x, y), "本路各部(实况复盘):", 13, new Color("d8d2c4")); y += 21;
-		foreach (var u in _sim.Units.Where(u => u.Side == Side.Friend))
+		foreach (var u in _sim.Units.Where(u => u.Side == Side.Friend && !u.Allied))
 		{
 			DrawText(new Vector2(x, y),
 				$"{u.Name}〔{BattleSim.ArmCn(u.Type)}〕 {u.MaxCount}人 → 存{u.AliveCount}  斩获{u.Kills}  {u.StateCn}",
 				12, new Color("c8c2b4"));
+			y += 19;
+		}
+		if (_sim.Units.Any(u => u.Allied))
+		{
+			y += 4;
+			int aStart = _sim.Units.Where(u => u.Allied).Sum(u => u.MaxCount);
+			int aAlive = _sim.Units.Where(u => u.Allied).Sum(u => u.AliveCount);
+			DrawText(new Vector2(x, y),
+				$"左翼李嵩一路:{aStart}人 → 存{aAlive}  {(leftCollapsed ? "崩覆" : "得全")}",
+				12, leftCollapsed ? new Color("d9917a") : new Color("e8b878"));
 			y += 19;
 		}
 		y += 8;

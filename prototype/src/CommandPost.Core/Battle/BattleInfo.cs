@@ -34,7 +34,10 @@ public sealed class Rider
     public BStance? OrderStance;             // 携带的姿态令(可与移动令同乘一骑)
     public float DwellLeft;
     public Dictionary<int, EnemySighting> Sightings = new();
+    public Dictionary<int, AllySighting> AllySightings = new();   // 沿途所见友邻战况
     public OwnStatus? ReportOwn;                  // 携带的我部近况
+    /// <summary>送达时弹的横幅(如左翼告急骑)——被截杀则永远弹不出来。</summary>
+    public string? ArriveAlertCn;
     public bool Lost, Delivered, OverdueAlerted;
     /// <summary>军书上行骑手:目的地是行营(西缘出图),不回帐。</summary>
     public bool ToHq;
@@ -47,9 +50,13 @@ public sealed class Rider
 
 public readonly record struct EnemySighting(Vec2F Pos, int Est, UnitType? Type, float T);
 public readonly record struct OwnStatus(int UnitId, Vec2F Pos, int Count, string StateCn, float T);
+/// <summary>友邻(如左翼李嵩部)的所见快照:位置 + 约数 + 战况判语。</summary>
+public readonly record struct AllySighting(Vec2F Pos, int Est, string StateCn, float T);
 
 public sealed class SandboxOwnMark { public int UnitId; public Vec2F Pos; public int Count; public string StateCn = "就位"; public float T; }
 public sealed class SandboxEnemyMark { public int UnitId; public Vec2F Pos; public int Est; public UnitType? Type; public float T; }
+/// <summary>沙盘上的友邻标记(UnitId=-1 为行营转述的整路位置,可能过时/偏)。</summary>
+public sealed class SandboxAllyMark { public int UnitId; public Vec2F Pos; public int Est; public string StateCn = ""; public float T; public string SourceCn = ""; }
 public sealed class FlagMarker { public Vec2F Pos; public string Label = ""; }
 
 /// <summary>玩家的沙盘:只装「送到手上的信息」——绝不引用真实世界对象(双世界铁律)。</summary>
@@ -57,6 +64,7 @@ public sealed class SandboxState
 {
     public Dictionary<int, SandboxOwnMark> Own { get; } = new();
     public Dictionary<int, SandboxEnemyMark> Enemy { get; } = new();
+    public Dictionary<int, SandboxAllyMark> Ally { get; } = new();
     public List<FlagMarker> Flags { get; } = new();
     public List<string> Feed { get; } = new();
 }

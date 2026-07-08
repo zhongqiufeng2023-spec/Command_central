@@ -13,8 +13,13 @@ public partial class TitleRoot : Node2D
 	private bool _help;
 	private string _hint = ""; private double _hintAge = 99;
 
-	private static readonly string[] Items = { "出征 · 黑松岭", "继续行军(读档)", "操作说明", "退出" };
-	private const float MenuX = 560, MenuY0 = 470, MenuDy = 46;
+	private string[] Items => new[]
+	{
+		"出征 · 黑松岭",
+		$"难度:{CommandPost.Core.BDifficultyProfile.Of(GameState.I.Difficulty).Cn}",
+		"继续行军(读档)", "操作说明", "退出"
+	};
+	private const float MenuX = 560, MenuY0 = 462, MenuDy = 44;
 
 	public override void _Ready()
 	{
@@ -55,7 +60,7 @@ public partial class TitleRoot : Node2D
 		}
 	}
 
-	private static int HitItem(Vector2 p)
+	private int HitItem(Vector2 p)
 	{
 		for (int i = 0; i < Items.Length; i++)
 			if (new Rect2(MenuX - 160, MenuY0 + i * MenuDy - 26, 320, 38).HasPoint(p)) return i;
@@ -72,11 +77,17 @@ public partial class TitleRoot : Node2D
 				GameState.Go(this, "res://Overworld.tscn");
 				break;
 			case 1:
+				GameState.I.Difficulty = (CommandPost.Core.BDifficulty)(((int)GameState.I.Difficulty + 1) % 3);
+				_hint = CommandPost.Core.BDifficultyProfile.DescCn(GameState.I.Difficulty);
+				_hintAge = 0;
+				Sfx.Play(this, Sfx.Click);
+				break;
+			case 2:
 				if (GameState.I.LoadRun()) { Sfx.Play(this, Sfx.Drum); GameState.Go(this, "res://Overworld.tscn"); }
 				else { _hint = "尚无存档——先出征,行军中的进度会自动记下。"; _hintAge = 0; Sfx.Play(this, Sfx.Click); }
 				break;
-			case 2: _help = true; Sfx.Play(this, Sfx.Click); break;
-			case 3: GetTree().Quit(); break;
+			case 3: _help = true; Sfx.Play(this, Sfx.Click); break;
+			case 4: GetTree().Quit(); break;
 		}
 	}
 
@@ -149,7 +160,7 @@ public partial class TitleRoot : Node2D
 		for (int i = 0; i < Items.Length; i++)
 		{
 			bool on = i == _sel;
-			bool dim = i == 1 && !GameState.SaveExists;
+			bool dim = i == 2 && !GameState.SaveExists;
 			var y = MenuY0 + i * MenuDy;
 			if (on)
 			{

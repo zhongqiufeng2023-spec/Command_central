@@ -40,13 +40,20 @@ public sealed partial class BattleSim
     {
         foreach (var e in Units.Where(x => x.Side == Side.Enemy && x.AiControlled && x.Controllable))
         {
+            if (Time < e.HoldUntilT) continue;              // 剧本按兵:左翼之敌先蛰伏
             e.ThinkClock -= Dt;
             if (e.ThinkClock > 0) continue;
             e.ThinkClock = 4f;
 
-            // 近身实时反应(免贴脸站桩);否则用「延迟共享 + 最后所见快照」情报
+            // 近身实时反应(免贴脸站桩);否则 剧本将令 > 全军共享敌情——
+            // 左翼之敌有自己的将令(扑李嵩营),不会被正面战况吸走
             var close = NearestUnit(e.Center, Side.Friend);
             Vec2F? goal = close != null && close.Center.DistanceTo(e.Center) <= EnemyCloseVision ? close.Center : null;
+            if (e.ScriptTarget is { } st2)
+            {
+                if (st2.DistanceTo(e.Center) < 100f || e.State == BUnitState.Engaged) e.ScriptTarget = null;
+                else goal ??= st2;
+            }
             if (goal is null)
             {
                 float kb = float.MaxValue;
@@ -67,6 +74,30 @@ public sealed partial class BattleSim
             }
             else if (e.State == BUnitState.Steady && e.Path.Count == 0)
                 e.SetOrderDirect(Map.Clamp(e.Center + new Vec2F(-90f, 0)), false, Map);   // 无敌情:徐进压上
+        }
+    }
+
+    /// <summary>友邻一路(左翼李嵩部)的自主 AI:守着驻地打,敌近则迎击,敌远则归位。
+    /// 它不归你辖、不进你的沙盘——它的死活,你得靠塘骑与告急骑才知道。</summary>
+    private void UpdateAlliedAi()
+    {
+        foreach (var a in Units.Where(x => x.Allied && x.Controllable))
+        {
+            a.ThinkClock -= Dt;
+            if (a.ThinkClock > 0) continue;
+            a.ThinkClock = 3f;
+
+            var foe = NearestUnit(a.Center, Side.Enemy);
+            float fd = foe?.Center.DistanceTo(a.Center) ?? float.MaxValue;
+            if (foe != null && fd <= 170f)
+            {
+                if (BArms.Ranged(a.Type) && a.Soldiers.Any(s => s.Ammo > 0))
+                    SkirmishStep(a, foe.Center, fd);                       // 左翼弩手也懂放箭保距离
+                else if (fd > 12f)
+                    a.SetOrderDirect(foe.Center, run: BArms.IsCav(a.Type) || fd < 50f, Map);
+            }
+            else if (a.Center.DistanceTo(a.Anchor) > 40f)
+                a.SetOrderDirect(a.Anchor, run: false, Map);               // 战罢归位,守土不追远
         }
     }
 

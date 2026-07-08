@@ -13,7 +13,10 @@ public partial class GameState : Node
 	public BattleSim? Battle;
 	public bool BattleActive => Battle is { Over: false };
 
-	/// <summary>低难度选项(F1):沙盘直接叠加瞭望所见。默认关——想看敌情,自己登瞭望台。</summary>
+	/// <summary>难度预设档(标题画面选;信息丰度旋钮,PRD §11)。</summary>
+	public BDifficulty Difficulty = BDifficulty.Normal;
+
+	/// <summary>低难度选项(F1 可随时切):沙盘直接叠加瞭望所见。轻松档默认开。</summary>
 	public bool EasySandboxVision;
 
 	/// <summary>本次进帐是否纯扎营(无战事,沙盘空空)。</summary>
@@ -38,6 +41,7 @@ public partial class GameState : Node
 	public void StartBattle()
 	{
 		Battle = BattleScenario.BlackPineField(_battleSeed++);
+		Battle.Difficulty = BDifficultyProfile.Of(Difficulty);
 		CampOnly = false;
 	}
 
@@ -66,7 +70,8 @@ public partial class GameState : Node
 	/// <summary>新开一局:回到出征起点(种子随时钟变,回回不同)。</summary>
 	public void NewRun()
 	{
-		Battle = null; CampOnly = true; EasySandboxVision = false;
+		Battle = null; CampOnly = true;
+		EasySandboxVision = Difficulty == BDifficulty.Easy;   // 轻松档:沙盘代望默认开
 		PartyPos = new Vector2(55 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
 		EnemyDefeated = false; Trust = 50; LastVerdict = null;
@@ -84,6 +89,7 @@ public partial class GameState : Node
 			["ex"] = EnemyPos.X, ["ey"] = EnemyPos.Y,
 			["defeated"] = EnemyDefeated, ["trust"] = Trust,
 			["easy"] = EasySandboxVision, ["seed"] = _battleSeed,
+			["diff"] = (int)Difficulty,
 			["hours"] = CampaignHours,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
@@ -106,6 +112,7 @@ public partial class GameState : Node
 		Trust = d["trust"].AsInt32();
 		EasySandboxVision = d["easy"].AsBool();
 		_battleSeed = d["seed"].AsInt32();
+		Difficulty = d.ContainsKey("diff") ? (BDifficulty)d["diff"].AsInt32() : BDifficulty.Normal;
 		CampaignHours = d.ContainsKey("hours") ? d["hours"].AsSingle() : 8f;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;

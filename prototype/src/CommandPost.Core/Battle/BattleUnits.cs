@@ -60,12 +60,22 @@ public sealed class BattleUnit
     public float DisengageT;         // 穿插窗口:>0 时骑队凿穿阵背而出(不恋战、边走边砍)
 
     public bool AiControlled;        // 敌方:简单单位级 AI
+    /// <summary>友邻一路(如左翼李嵩部):同侧但不归你辖——不可下令、不入本路沙盘、自有 AI。</summary>
+    public bool Allied;
+    /// <summary>驻地锚点:友邻/敌军无战事时守着的位置。</summary>
+    public Vec2F Anchor;
+    /// <summary>剧本按兵:此刻之前 AI 不动(如左翼之敌先蛰伏、到时才压上)。</summary>
+    public float HoldUntilT;
+    /// <summary>剧本进军目标:AI 无敌情时朝此推进(到附近或接敌即清除)。</summary>
+    public Vec2F? ScriptTarget;
     public float ThinkClock, MoraleClock, ReportClock, EventCooldown, RoutClock, RallyClock;
     public bool ReportedEngaged, ReportedRouting;
     public int VolleyTargetId = -1;  // 远程齐射目标部队
 
     /// <summary>姿态(玩家部队按此自主行事;敌 AI 走自己的脑子)。</summary>
     public BStance Stance = BStance.Hold;
+    /// <summary>武将解读命令时的走样批注(如「贪功压前」)——真相侧不广播,军报/探问才带回。</summary>
+    public string LastQuirkCn = "";
     /// <summary>最近一次受威胁(挨箭/接刃)的方位与时刻——姿态反应的依据。</summary>
     public Vec2F LastThreatPos;
     public float LastThreatT = -999f;

@@ -8,7 +8,7 @@ namespace CommandPost.Core;
 // 铁律(支柱①):战中呈现给玩家的目标进度只用「沙盘所知」判定;
 // 用真相判定的目标(破敌/保全)战中一律显示未定,战毕才揭晓。
 
-public enum BObjectiveKind { ScoutEnemy, ReportToHq, DefeatEnemy, PreserveArmy }
+public enum BObjectiveKind { ScoutEnemy, ReportToHq, DefeatEnemy, PreserveArmy, RelieveAlly, ReportAlly }
 public enum BObjectiveState { Pending, Partial, Done, Failed }
 
 /// <summary>一条可判定的行营任务目标(逐兵战役版)。</summary>
@@ -37,6 +37,10 @@ public sealed class BHqOrder
     public string TextCn = "";
     public string[] Activates = Array.Empty<string>();
     public bool Delivered;
+    /// <summary>随令附上行营所知的左翼位置(它的旧认知——发令那刻定格,还带偏差)。</summary>
+    public bool SeedAllyPos;
+    public bool Snapped;
+    public Vec2F AllySnapshot;
     public float ArriveT => DispatchT + LinkDelay;
 }
 
@@ -59,6 +63,11 @@ public sealed class BattleMission
     public int BestReportIntel;
     /// <summary>破敌令送达前就赢了 = 不俟令而战(政治上是把双刃剑)。</summary>
     public bool WonBeforeWarOrder;
+    /// <summary>载有左翼战况的军书送达数(报左翼目标)。</summary>
+    public int AllyReportsDelivered;
+    /// <summary>本部两队以上抵近左翼战地(评「驰援及时」还是「观望」)。</summary>
+    public bool RescueArrived;
+    public float RescueT;
 
     /// <summary>战毕评语(null = 战役未毕)。</summary>
     public Appraisal? Verdict;
@@ -107,6 +116,14 @@ public sealed class BattleMission
                     if (ReportsDelivered > 0) o.State = BObjectiveState.Done;
                     else if (o.Active) o.State = BObjectiveState.Failed;
                     break;
+                case BObjectiveKind.RelieveAlly:
+                    // 左翼保住了没有——真相说了算(战中你只能靠零星情报揪心)
+                    o.State = sim.LeftWingCollapsed ? BObjectiveState.Failed : BObjectiveState.Done;
+                    break;
+                case BObjectiveKind.ReportAlly:
+                    if (AllyReportsDelivered > 0) o.State = BObjectiveState.Done;
+                    else if (o.Active) o.State = BObjectiveState.Failed;
+                    break;
             }
         }
         Verdict = BattlePoliticalJudge.Judge(sim, this);
@@ -117,8 +134,9 @@ public sealed class BattleMission
 public static class BattleMissions
 {
     /// <summary>
-    /// 黑松岭(逐兵版):第一道令(侦明+具报)开战即至;第二道令(破敌)约四分钟后压到——
-    /// 朝廷促战,不欲久师。窗口 20 分钟,到时虏自遁,纵虏是罪。
+    /// 黑松岭(逐兵版):第一道令(侦明+具报)开战即至;第二道令(破敌)约四分钟后压到;
+    /// 第三道令(驰援左翼)七分钟后追至——那时你多半已陷在当面之敌里,进退两难。
+    /// 窗口 20 分钟,到时虏自遁,纵虏是罪;左翼李嵩若崩,是硬性败。
     /// </summary>
     public static BattleMission BlackPine() => new()
     {
@@ -131,6 +149,8 @@ public static class BattleMissions
             new BObjective { Id = "B", Cn = "军书具报行营(按 B 发书)", Kind = BObjectiveKind.ReportToHq, Active = false },
             new BObjective { Id = "C", Cn = "破当面之虏",               Kind = BObjectiveKind.DefeatEnemy, Primary = true, Active = false },
             new BObjective { Id = "D", Cn = "保全士马(折损不逾三成)",   Kind = BObjectiveKind.PreserveArmy },
+            new BObjective { Id = "E", Cn = "驰援左翼,保李嵩不崩",       Kind = BObjectiveKind.RelieveAlly, Primary = true, Active = false },
+            new BObjective { Id = "F", Cn = "左翼战况,具书上闻",         Kind = BObjectiveKind.ReportAlly, Active = false },
         },
         Orders =
         {
@@ -140,6 +160,9 @@ public static class BattleMissions
             new BHqOrder { DispatchT = 210, LinkDelay = 30, TitleCn = "第二道令",
                 TextCn = "行营再谕:朝廷促战,不欲久师。限尔部即行破虏,毋纵其遁!",
                 Activates = new[] { "C" } },
+            new BHqOrder { DispatchT = 420, LinkDelay = 30, TitleCn = "第三道令",
+                TextCn = "行营急谕:左翼李嵩为虏所迫,其势甚急!尔部速分兵驰援,毋得迁延——所示方位,乃行营所知,或有出入,尔自斟酌。",
+                Activates = new[] { "E", "F" }, SeedAllyPos = true },
         }
     };
 }
@@ -194,6 +217,17 @@ public static class BattlePoliticalJudge
             if (d2.State == BObjectiveState.Done) Add(6 * lossW, "士马保全");
             else Add(-8 * lossW, "折损逾三成,枯骨盈野");
         }
+
+        if (m["E"] is { } e5)
+        {
+            if (e5.State == BObjectiveState.Done)
+            {
+                if (m.RescueArrived) Add(14, "提兵北援,左翼获全——李嵩具表称谢");
+                else if (e5.Active) Add(-6, "左翼幸全,然尔部未至,行营记曰:观望");
+            }
+            else if (e5.State == BObjectiveState.Failed) Add(-22, "坐视左翼崩覆,罪无可逭");
+        }
+        if (m["F"]?.State == BObjectiveState.Done) Add(4, "左翼战况上闻,行营得以调度");
 
         if (sim.Winner == Side.Friend) Add(10, "捷书驰奏京师");
 

@@ -124,8 +124,8 @@ public class BattleMissionTests
     {
         var sim = BattleScenario.BlackPineField();
         Assert.NotNull(sim.Mission);
-        Assert.Equal(4, sim.Mission!.Objectives.Count);
-        Assert.True(sim.Mission.Orders.Count >= 2);                    // 分阶段中军令
+        Assert.Equal(6, sim.Mission!.Objectives.Count);                // A侦明 B具报 C破敌 D保全 E驰援 F报左翼
+        Assert.True(sim.Mission.Orders.Count >= 3);                    // 分阶段中军令(含驰援令)
     }
 
     // ================= 战前布阵 =================
