@@ -17,11 +17,50 @@ public static class GeneralSprite
 		get
 		{
 			if (_tex != null) return _tex;
-			var img = Image.LoadFromFile(ProjectSettings.GlobalizePath("res://assets/general.png"));
-			KeyOutWhite(img);
-			_tex = ImageTexture.CreateFromImage(img);
+			// 三级回退:①用户自制素材(assets/,将来编辑器里做的放这) ②仓库自带 src/将军.png ③程序化替身(永不崩)
+			string projDir = ProjectSettings.GlobalizePath("res://");
+			var candidates = new[]
+			{
+				System.IO.Path.Combine(projDir, "assets", "general.png"),
+				System.IO.Path.Combine(projDir, "assets", "将军.png"),
+				System.IO.Path.GetFullPath(System.IO.Path.Combine(projDir, "..", "src", "将军.png")),
+			};
+			foreach (var p in candidates)
+			{
+				if (!System.IO.File.Exists(p)) continue;
+				var img = Image.LoadFromFile(p);
+				if (img == null) continue;
+				KeyOutWhite(img);
+				_tex = ImageTexture.CreateFromImage(img);
+				return _tex;
+			}
+			_tex = ImageTexture.CreateFromImage(MakeFallbackSheet());
 			return _tex;
 		}
+	}
+
+	/// <summary>找不到立绘时的程序化替身帧表(暗红披风小人):游戏照跑,等用户放上自己的素材。</summary>
+	private static Image MakeFallbackSheet()
+	{
+		var img = Image.CreateEmpty(CellW * 8, CellH * 4, false, Image.Format.Rgba8);
+		var armor = new Color(0.45f, 0.17f, 0.13f);
+		var trim = new Color(0.85f, 0.70f, 0.30f);
+		for (int cy = 0; cy < 4; cy++)
+			for (int cx = 0; cx < 8; cx++)
+			{
+				int ox = cx * CellW, oy = cy * CellH;
+				int bob = cx % 2 == 0 ? 0 : 6;                       // 走路上下颠一颠
+				for (int y = 60 + bob; y < 236; y++)
+					for (int x = 34; x < 94; x++)
+						img.SetPixel(ox + x, oy + y, armor);
+				for (int y = 24 + bob; y < 60 + bob; y++)             // 头
+					for (int x = 46; x < 82; x++)
+						img.SetPixel(ox + x, oy + y, new Color(0.80f, 0.62f, 0.48f));
+				for (int y = 96 + bob; y < 104 + bob; y++)            // 束带
+					for (int x = 34; x < 94; x++)
+						img.SetPixel(ox + x, oy + y, trim);
+			}
+		return img;
 	}
 
 	/// <summary>白底抠透明 + 白边羽化:低饱和的亮像素按「接近白的程度」渐隐并压暗,

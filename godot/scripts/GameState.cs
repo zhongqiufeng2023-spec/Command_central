@@ -23,10 +23,20 @@ public partial class GameState : Node
 	public bool CampOnly = true;
 
 	// —— 大地图进度(200×130 瓦片 ×16px 世界坐标)——
-	public Vector2 PartyPos = new(55 * 16, 66 * 16);     // 前锋营
+	public Vector2 PartyPos = new(26 * 16, 66 * 16);     // 本部(随军出征起点)
 	public Vector2 EnemyPos = new(150 * 16, 64 * 16);    // 当面之敌:黑松岭东缘汛地
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
+
+	// —— 兵团与章节剧本(一切服务于剧情;每章换一套 beat)——
+	/// <summary>大军(中军纵队)位置:你是它的前锋一部——平时随军行军,奉令才可自由行动。</summary>
+	public Vector2 ArmyPos = new(24 * 16, 64 * 16);
+	/// <summary>第一章节拍:0=随军东进 1=前出侦破(自由) 2=归建复命(自由) 3=随军进岭 4=章末。</summary>
+	public int Beat;
+	/// <summary>随军中(0/3 拍):不得擅离队列。</summary>
+	public bool ArmyLocked => Beat is 0 or 3;
+	/// <summary>当前任务限期(行军历小时;<0=无限期)。逾期=催令+信任惩罚。</summary>
+	public float MissionDeadline = -1f;
 
 	/// <summary>行军历:出征以来的时辰数(行军才走表;第一日辰时出兵)。</summary>
 	public float CampaignHours = 8f;
@@ -109,8 +119,10 @@ public partial class GameState : Node
 	{
 		Battle = null; CampOnly = true;
 		EasySandboxVision = Difficulty == BDifficulty.Easy;   // 轻松档:沙盘代望默认开
-		PartyPos = new Vector2(55 * 16, 66 * 16);
+		PartyPos = new Vector2(26 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
+		ArmyPos = new Vector2(24 * 16, 64 * 16);
+		Beat = 0; MissionDeadline = -1f;
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
@@ -129,6 +141,7 @@ public partial class GameState : Node
 			["diff"] = (int)Difficulty,
 			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
 			["bones"] = Bones, ["san"] = San,
+			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["beat"] = Beat, ["deadline"] = MissionDeadline,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -156,6 +169,9 @@ public partial class GameState : Node
 		Fatigue = d.ContainsKey("fatigue") ? d["fatigue"].AsSingle() : 0f;
 		Bones = d.ContainsKey("bones") ? d["bones"].AsInt32() : 0;
 		San = d.ContainsKey("san") ? d["san"].AsSingle() : 75f;
+		ArmyPos = d.ContainsKey("ax") ? new Vector2(d["ax"].AsSingle(), d["ay"].AsSingle()) : new Vector2(24 * 16, 64 * 16);
+		Beat = d.ContainsKey("beat") ? d["beat"].AsInt32() : 1;
+		MissionDeadline = d.ContainsKey("deadline") ? d["deadline"].AsSingle() : -1f;
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;
