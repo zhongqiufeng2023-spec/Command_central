@@ -20,6 +20,17 @@ public enum RiderKind { Order, Report, Scout, Query, Decoy }
 
 /// <summary>疑兵:数十老弱虚张旌旗金鼓——敌军望见就当一支真部队记进认知(佯动,蓝图§十二)。</summary>
 public sealed class BDecoy { public Vec2F Pos; public float ExpireT; public int FakeId; }
+
+/// <summary>细作:战前混入敌军某部的间谍——周期递密报(确数),每递一次冒暴露之险。</summary>
+public sealed class BSpy
+{
+    public int UnitId;
+    public float NextT;
+    public bool Burned;          // 事败(或已脱身)——从此再无书信
+    public float BurnedT;
+    public bool HintGiven;
+    public int Reports;
+}
 public enum RiderPhase { Outbound, Dwell, Return }
 
 /// <summary>令骑/塘骑:真实世界里骑行的信使——送令、回报、侦察、探问。会被截杀(纯沉默)。</summary>

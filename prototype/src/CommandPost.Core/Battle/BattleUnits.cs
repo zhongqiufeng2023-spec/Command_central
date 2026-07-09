@@ -81,6 +81,10 @@ public sealed class BattleUnit
     public bool AwaitingReply;       // 请示已发,候中军回令
     public bool AskedOnce;           // 本次接触已请示过(威胁散去后重置)
     public float AskedT;
+
+    // —— 布阵预令(面授机宜):开战擂鼓那一刻即照此进军 ——
+    public Vec2F? PlannedDest;
+    public bool PlannedRun;
     /// <summary>最近一次受威胁(挨箭/接刃)的方位与时刻——姿态反应的依据。</summary>
     public Vec2F LastThreatPos;
     public float LastThreatT = -999f;

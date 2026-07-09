@@ -55,6 +55,13 @@ public sealed partial class BattleSim
     public int DecoysLeft { get; set; } = 2;
     private int _nextDecoy = -501;
 
+    /// <summary>战前可遣的细作名额(间谍:混入敌军递密报)。</summary>
+    public int SpiesAvailable { get; set; }
+    /// <summary>已混入敌营的细作。</summary>
+    public List<BSpy> Spies { get; } = new();
+    /// <summary>细作每次递书的暴露概率(测试可置 0/1)。</summary>
+    public float SpyCatchChance { get; set; } = 0.10f;
+
     /// <summary>战前布阵:时间冻结,本方各部可当面吩咐(不费令骑)。FinishDeploy 后开战。</summary>
     public bool Deploying { get; private set; }
     /// <summary>布阵区东界(世界米):开战前只能摆在自家地界。</summary>
@@ -116,7 +123,11 @@ public sealed partial class BattleSim
     {
         if (!Deploying) return;
         Deploying = false;
-        Feed("各部就位,战鼓起!");
+        int planned = 0;
+        foreach (var u in Units)
+            if (u is { Side: Side.Friend, Allied: false, PlannedDest: { } pd })
+            { u.SetOrderDirect(pd, u.PlannedRun, Map); u.PlannedDest = null; planned++; }
+        Feed(planned > 0 ? $"各部就位,战鼓起!{planned} 部依预令而动。" : "各部就位,战鼓起!");
     }
 
     public void Tick()
@@ -131,6 +142,7 @@ public sealed partial class BattleSim
         UpdateRiders();
         UpdateMission();
         UpdateSanPhantoms(); // SAN 低:沙盘自己长出不存在的敌人
+        UpdateSpies();       // 敌营细作的密报(与暴露)
         AutoReports();
         UpdateUnits();
         RebuildHash();
@@ -159,6 +171,46 @@ public sealed partial class BattleSim
         Sandbox.Enemy[id] = new SandboxEnemyMark { UnitId = id, Pos = pos, Est = est, Type = null, T = Time };
         Alerts.Add(new Alert((int)Time, $"塘骑惊报:又见虏骑!约{est}众,不知何部……", true));
         Reveals.Add($"{FormatT(Time)} 那支「约{est}众」的虏骑从未存在——心神耗尽时,沙盘也会骗你");
+    }
+
+    /// <summary>细作(间谍):混在敌部里,周期递出密报——身在营中,数的是确数,还知道动向。
+    /// 每递一次冒暴露之险:事败=纯沉默(难度档可在久无书信后给一句提示);
+    /// 所在虏部若溃散,细作趁乱脱身归来。</summary>
+    private void UpdateSpies()
+    {
+        foreach (var sp in Spies)
+        {
+            if (sp.Burned)
+            {
+                if (!sp.HintGiven && Difficulty.OverdueHint && Time > sp.BurnedT + 240f)
+                { sp.HintGiven = true; Alerts.Add(new Alert((int)Time, "敌营的细作久无书信……但愿只是不便动笔。", false)); }
+                continue;
+            }
+            var u = ById(sp.UnitId);
+            if (u is null || u.AliveCount == 0 || u.State is BUnitState.Shattered or BUnitState.Destroyed)
+            {
+                sp.Burned = true; sp.BurnedT = float.MaxValue; sp.HintGiven = true;
+                Alerts.Add(new Alert((int)Time, "细作趁乱脱身归来:所在虏部已溃,再无可报。", false));
+                continue;
+            }
+            if (Time < sp.NextT) continue;
+            sp.NextT = Time + 75f + (float)_rng.NextDouble() * 60f;
+
+            if (_rng.Chance(SpyCatchChance))
+            {
+                sp.Burned = true; sp.BurnedT = Time;
+                Reveals.Add($"{FormatT(Time)} 细作递书时事败,没于敌营——此后的杳无音讯,不是他偷懒");
+                continue;
+            }
+
+            sp.Reports++;
+            var mk = Sandbox.Enemy.TryGetValue(u.Id, out var em) ? em
+                   : Sandbox.Enemy[u.Id] = new SandboxEnemyMark { UnitId = u.Id };
+            mk.Pos = u.Center; mk.Est = u.AliveCount; mk.Type = u.Type; mk.T = Time - 15f;   // 递书出营耗一刻
+            string intent = u.Path.Count > 0 ? $"正开往 ({(int)u.Path[^1].X},{(int)u.Path[^1].Y})" : "屯驻未动";
+            Alerts.Add(new Alert((int)Time,
+                $"细作密报:{ArmCn(u.Type)}部实有 {u.AliveCount} 骑步,现在 ({(int)u.Center.X},{(int)u.Center.Y}),{intent}。", true));
+        }
     }
 
     /// <summary>逐秒录一帧(战毕再补一帧收尾)。内存量级:20 分钟 ≈ 1200 帧,忽略不计。</summary>

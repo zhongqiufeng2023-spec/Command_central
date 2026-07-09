@@ -21,6 +21,31 @@ public sealed partial class BattleSim
         return true;
     }
 
+    /// <summary>布阵·预令(面授机宜):开战擂鼓那一刻,该部即刻照此进军——
+    /// 当面吩咐,不走令骑、不经解读——这是你信息最全、控制最强的唯一时刻(PRD §6.0)。</summary>
+    public bool DeployPlanMove(int unitId, Vec2F dest, bool run)
+    {
+        if (!Deploying || ById(unitId) is not { Side: Side.Friend, Allied: false } u) return false;
+        u.PlannedDest = Map.NearestPassable(Map.Clamp(dest));
+        u.PlannedRun = run;
+        return true;
+    }
+
+    /// <summary>战前遣细作(只在布阵时;开战后就混不进去了):扮作虏中杂胡,混入敌军最大一部。
+    /// 战中他会周期递出密报(兵力确数+位置+动向);每递一次冒暴露之险——
+    /// 一旦事败=纯沉默,你只会觉得他久无书信(难度可给提示)。</summary>
+    public bool PlantSpy()
+    {
+        if (!Deploying || SpiesAvailable <= 0) return false;
+        var target = Units.Where(u => u.Side == Side.Enemy && u.AliveCount > 0)
+                          .OrderByDescending(u => u.AliveCount).FirstOrDefault();
+        if (target == null) return false;
+        SpiesAvailable--;
+        Spies.Add(new BSpy { UnitId = target.Id, NextT = 60f + (float)_rng.NextDouble() * 60f });
+        Feed("细作已遣:扮作虏中杂胡混入敌营——能不能递出书信,看他的造化。");
+        return true;
+    }
+
     /// <summary>布阵:当面吩咐姿态(不费令骑)。</summary>
     public void DeployStance(int unitId, BStance st)
     {

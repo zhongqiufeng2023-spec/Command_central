@@ -57,7 +57,7 @@ public partial class BattleRoot
 		DrawText(hq + new Vector2(0, -14), "帅帐", 12, new Color("e6c25c"), center: true);
 	}
 
-	/// <summary>布阵区(战前):西线自家地界淡金渲染 + 东界虚线。</summary>
+	/// <summary>布阵区(战前):西线自家地界淡金渲染 + 东界虚线 + 各部预令箭头。</summary>
 	private void DrawDeployZone()
 	{
 		if (!_sim.Deploying) return;
@@ -67,6 +67,19 @@ public partial class BattleRoot
 		for (float y = tl.Y; y < br.Y; y += 14)
 			DrawLine(new Vector2(br.X, y), new Vector2(br.X, Mathf.Min(y + 7, br.Y)), new Color(0.85f, 0.7f, 0.3f, 0.55f), 2f);
 		DrawText(new Vector2(br.X, tl.Y + 90), "布阵区界", 12, new Color("d9b34a"), center: true);
+
+		// 预令箭头:开战即动的既定路线(布阵=你亲眼看着他们领命)
+		foreach (var u in _sim.Units)
+		{
+			if (u is not { Side: Side.Friend, Allied: false, PlannedDest: { } pd }) continue;
+			var a = ToScreen(u.Center);
+			var b = ToScreen(pd);
+			DrawDashedLine(a, b, new Color(0.9f, 0.78f, 0.42f, 0.8f), 2f, 9f);
+			var dir = (b - a).Normalized();
+			DrawColoredPolygon(new[] { b, b - dir * 12f + dir.Orthogonal() * 5f, b - dir * 12f - dir.Orthogonal() * 5f },
+				new Color(0.9f, 0.78f, 0.42f, 0.9f));
+			DrawText(b + new Vector2(0, -12), "预令", 10, new Color("e6c25c"), center: true);
+		}
 	}
 
 	// —— 真实战场(对照):两千余士兵逐个画 ——

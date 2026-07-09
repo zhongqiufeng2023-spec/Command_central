@@ -27,9 +27,10 @@ public class LeftWingTests
         Assert.All(allies, a => Assert.Equal(Side.Friend, a.Side));
         Assert.All(allies, a => Assert.False(sim.Sandbox.Own.ContainsKey(a.Id)));   // 不进你的沙盘
 
-        var leftFoes = sim.Units.Where(u => u.Side == Side.Enemy && u.HoldUntilT > 0).ToList();
-        Assert.Equal(4, leftFoes.Count);                                   // 左翼之敌四队蛰伏
-        Assert.All(leftFoes, e => Assert.NotNull(e.ScriptTarget));
+        var leftFoes = sim.Units.Where(u => u.Side == Side.Enemy && u.ScriptTarget is { } st && st.Y < 256f).ToList();
+        Assert.Equal(4, leftFoes.Count);                                   // 左翼之敌四队(将令=扑北面李嵩高地)
+        Assert.All(leftFoes, e => Assert.True(e.HoldUntilT > 0));          // 且先蛰伏
+        Assert.All(sim.Units.Where(u => u.Side == Side.Enemy), e => Assert.True(e.HoldUntilT > 0));   // 前军也分梯次,不再开场压上
 
         Assert.Contains(sim.Mission!.Objectives, o => o.Kind == BObjectiveKind.RelieveAlly && o.Primary && !o.Active);
         Assert.Contains(sim.Mission.Orders, o => o.SeedAllyPos);           // 驰援令随附行营所知位置

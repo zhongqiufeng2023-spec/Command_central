@@ -143,7 +143,7 @@ public static class BattleMissions
     {
         Title = "黑松岭 · 侦而后战",
         HqPersonality = Personality.Aggressive,     // 周崇尚功:重战果、轻伤亡
-        EndTime = 1200f,
+        EndTime = 1800f,                            // 大战场:三十分钟窗口(PRD §6.1 上限)
         Objectives =
         {
             new BObjective { Id = "A", Cn = "侦明当面之敌(四部以上)", Kind = BObjectiveKind.ScoutEnemy, Primary = true, Active = false, RequiredCount = 4 },
@@ -158,10 +158,10 @@ public static class BattleMissions
             new BHqOrder { DispatchT = 0, LinkDelay = 8, TitleCn = "第一道令",
                 TextCn = "行营谕:虏骑犯境,踪迹未明。速遣塘骑,侦得虏踪,具军书以闻。",
                 Activates = new[] { "A", "B" } },
-            new BHqOrder { DispatchT = 210, LinkDelay = 30, TitleCn = "第二道令",
+            new BHqOrder { DispatchT = 300, LinkDelay = 30, TitleCn = "第二道令",
                 TextCn = "行营再谕:朝廷促战,不欲久师。限尔部即行破虏,毋纵其遁!",
                 Activates = new[] { "C" } },
-            new BHqOrder { DispatchT = 420, LinkDelay = 30, TitleCn = "第三道令",
+            new BHqOrder { DispatchT = 480, LinkDelay = 30, TitleCn = "第三道令",
                 TextCn = "行营急谕:左翼李嵩为虏所迫,其势甚急!尔部速分兵驰援,毋得迁延——所示方位,乃行营所知,或有出入,尔自斟酌。",
                 Activates = new[] { "E", "F" }, SeedAllyPos = true },
         }

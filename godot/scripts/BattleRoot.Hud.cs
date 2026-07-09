@@ -13,7 +13,7 @@ public partial class BattleRoot
 		DrawText(new Vector2(16, 22), $"黑松岭之战 · {mode}   {BattleSim.FormatT(_sim.Time)} {clock}", 15, new Color("e8e0d0"));
 		DrawText(new Vector2(16, 42),
 			_sim.Deploying
-				? "布阵中(时间未动):左键选部 · 右键摆位(即时) · 1234 当面定姿态 | 回车=擂鼓开战 | 滚轮缩放 WASD平移 Esc回帐"
+				? $"布阵中(时间未动):左键选部 · 右键摆位 · Shift+右键预令(开战即动) · 1234 定姿态 · K遣细作(余{_sim.SpiesAvailable}) | 回车=擂鼓开战 Esc回帐"
 				: "空格暂停 ±调速 Tab视图 | 左键选部 右键行军 1进攻 2据守 3等待 4游走 R探问 B军书 | 5鼓 6金 7旗(声程即时·敌亦闻) | 中键塘骑 Shift+中键疑兵 Ctrl+左插旗 Esc回帐",
 			11, new Color("9aa0a8"));
 		DrawMissionBoard();

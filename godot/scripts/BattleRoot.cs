@@ -141,6 +141,12 @@ public partial class BattleRoot : Node2D
 			case Key.Key5: SoundSignal(BStance.Attack, Sfx.Drum); break;
 			case Key.Key6: SoundSignal(BStance.Standby, Sfx.Horn); break;
 			case Key.Key7: SoundSignal(BStance.Hold, Sfx.Alert); break;
+			case Key.K when _sim.Deploying:
+				if (_sim.PlantSpy())
+				{ _banner = "细作已遣:混入敌营——开战后静候他的密报(也可能永远等不到)。"; _bannerAge = 0; Sfx.Play(this, Sfx.Click); }
+				else
+				{ _banner = _sim.SpiesAvailable <= 0 ? "无细作可遣。" : "细作遣不出去。"; _bannerAge = 0; }
+				break;
 			case Key.F1:
 				if (GameState.I != null)
 				{
@@ -201,7 +207,12 @@ public partial class BattleRoot : Node2D
 				_sim.RemoveFlagNear(world); break;
 
 			case MouseButton.Right when _selectedId >= 0 && !_sim.Over:
-				if (_sim.Deploying) { _sim.DeployMove(_selectedId, world); Sfx.Play(this, Sfx.Click); }
+				if (_sim.Deploying && mb.ShiftPressed)
+				{
+					if (_sim.DeployPlanMove(_selectedId, world, run: false))
+					{ _banner = "预令已授:开战擂鼓,该部即刻照此进军(面授机宜,不走令骑)。"; _bannerAge = 0; Sfx.Play(this, Sfx.Click); }
+				}
+				else if (_sim.Deploying) { _sim.DeployMove(_selectedId, world); Sfx.Play(this, Sfx.Click); }
 				else { _sim.IssueMove(_selectedId, world, run: mb.ShiftPressed); Sfx.Play(this, Sfx.Gallop); }
 				break;
 
