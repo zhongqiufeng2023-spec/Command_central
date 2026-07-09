@@ -37,6 +37,7 @@ public partial class OverworldRoot : Node2D
 	private bool _letterOpen;                                             // 谒见军令卷轴
 	private bool _ending;                                                 // 章末结算
 	private bool _warnedSighting;
+	private double _engageGrace;                                          // 上图后的接敌保护期(防秒接敌死循环)
 	private bool _duskPrompted;                                           // 每晚只提醒一次「歇营还是兼程」
 	private bool _grainWarned40, _grainWarned10;
 	private double _eventCd = 26;                                         // 行军人味小报冷却
@@ -80,6 +81,10 @@ public partial class OverworldRoot : Node2D
 		BuildMap();
 		_pos = GameState.I.PartyPos;
 		_enemy = GameState.I.EnemyPos;
+		_engageGrace = 4.0;                             // 上图缓几秒再判接敌(战罢/读档都别秒开战)
+
+		if (GameState.I.PendingBanner != "")
+		{ _banner = GameState.I.PendingBanner; _bannerAge = 0; GameState.I.PendingBanner = ""; }
 
 		// 章节剧本推进:破敌归来 → 中军令「归建复命」
 		if (GameState.I.Beat == 1 && GameState.I.EnemyDefeated)
@@ -190,6 +195,7 @@ public partial class OverworldRoot : Node2D
 	public override void _Process(double delta)
 	{
 		_t0 += delta; _bannerAge += delta;
+		if (_engageGrace > 0) _engageGrace -= delta;
 		if (_menu.Open || _letterOpen || _ending) { QueueRedraw(); return; }
 		float dt = (float)delta;
 
@@ -295,20 +301,21 @@ public partial class OverworldRoot : Node2D
 		}
 
 		// —— 当面之敌:扼守黑松岭东缘;你进抵岭一线(靠近)即出而接敌 ——
+		// (_engageGrace:上图后的缓冲——战罢班师/读档,不许落地秒接敌)
 		if (!GameState.I.EnemyDefeated)
 		{
 			var toMe = _pos - _enemy;
-			if (toMe.Length() < 520f && !_warnedSighting)
+			if (toMe.Length() < 520f && !_warnedSighting && _engageGrace <= 0)
 			{ _warnedSighting = true; _banner = "塘报:虏骑出汛,正向我逼来!(C=扎营备战,可先布阵)"; _bannerAge = 0; }
 			else if (toMe.Length() > 700f) _warnedSighting = false;
-			if (toMe.Length() < 340f)
+			if (toMe.Length() < 340f && _engageGrace <= 0)
 				_enemy += toMe.Normalized() * 92f * dt;                       // 出汛接敌
 			else if ((_enemy - EnemyPost).Length() > 24f)
 				_enemy += (EnemyPost - _enemy).Normalized() * 60f * dt;       // 归汛
 			else
 				_enemy = EnemyPost + new Vector2(Mathf.Cos((float)_t0 * 0.5f), Mathf.Sin((float)_t0 * 0.7f)) * 14f;
 
-			if (toMe.Length() < 30f)
+			if (toMe.Length() < 30f && _engageGrace <= 0)
 			{
 				GameState.I.PartyPos = _pos; GameState.I.EnemyPos = _enemy;
 				GameState.I.StartBattle();

@@ -38,6 +38,9 @@ public partial class GameState : Node
 	/// <summary>当前任务限期(行军历小时;<0=无限期)。逾期=催令+信任惩罚。</summary>
 	public float MissionDeadline = -1f;
 
+	/// <summary>回大地图时要弹的横幅(如战罢脱离接触)——Overworld._Ready 取走即清。</summary>
+	public string PendingBanner = "";
+
 	/// <summary>行军历:出征以来的时辰数(行军才走表;第一日辰时出兵)。</summary>
 	public float CampaignHours = 8f;
 
@@ -101,6 +104,18 @@ public partial class GameState : Node
 						: Battle.Winner == CommandPost.Core.Side.Enemy ? -15f : -5f;
 			San = System.Math.Clamp(San + swing - Battle.FriendLossFrac * 20f, 0f, 100f);
 		}
+
+		// 战罢脱离接触:开战时两军标是贴在一起的——虏未灭就得拉开,
+		// 否则一回大地图立刻又撞上=回车再战的死循环
+		if (!EnemyDefeated)
+		{
+			EnemyPos = new Vector2(150 * 16, 64 * 16);                   // 虏骑收兵归汛
+			var away = PartyPos - EnemyPos;
+			var dir = away.Length() > 1f ? away.Normalized() : new Vector2(-1, 0);
+			PartyPos += dir * 300f;                                       // 尔部退出接战之地
+			PendingBanner = "战罢——两军脱离接触:虏骑退回汛地,尔部收兵移营。";
+		}
+
 		Battle = null;
 		CampOnly = true;
 	}
