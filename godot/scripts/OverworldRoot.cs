@@ -12,9 +12,13 @@ public partial class OverworldRoot : Node2D
 {
 	private const int TW = 200, TH = 130;
 	private const float TS = 16f;
+	/// <summary>世界种子:大地图地貌固定成「这一方边野」——地是学得会的,跟骑砍的卡拉迪亚一样。</summary>
+	private const int WorldSeed = 20260711;
 	private static readonly Vector2 ViewCenter = new(560, 380);
-	// 地表:0草 1林 2河 3滩 4官道 5山 6我营 7虏帐 8屋舍
+	// 地表:0草 1林 2河 3滩 4官道 5山 6我营 7虏帐 8屋舍 9瘴土 10丘 11泽(WTerrain 对齐)
 	private readonly byte[,] _t = new byte[TW, TH];
+	/// <summary>高度热力图(WorldGen 输出):地表明暗浮雕用——山脊亮、洼地沉。</summary>
+	private float[,] _height = new float[TW, TH];
 
 	private Vector2 _pos;
 	private Vector2? _moveTarget;
@@ -97,11 +101,17 @@ public partial class OverworldRoot : Node2D
 
 	private void BuildMap()
 	{
+		// —— 热力图地基:高度×湿度分类出山/丘/林/泽/草(确定性;渲染取高度做浮雕)——
+		var gen = CommandPost.Core.WorldGen.Terrain(WorldSeed, TW, TH, out _height);
 		for (int x = 0; x < TW; x++)
 			for (int y = 0; y < TH; y++)
-				_t[x, y] = (byte)(y < 6 + (x * 7) % 4 ? 5 : 0);              // 北缘群山(锯齿)
+				_t[x, y] = gen[x, y];
 
-		// 黑松岭:中东部大岭(参差的松海)
+		// —— 世界的骨架(手绘覆盖:剧设与人文要素不交给噪声)——
+		for (int x = 0; x < TW; x++)                                         // 北缘群山(锯齿边墙)
+			for (int y = 0; y < 6 + (x * 7) % 4; y++) Set(x, y, 5);
+
+		// 黑松岭:中东部大岭(参差的松海——序章战场所在)
 		for (int y = 22; y <= 100; y++)
 		{
 			int wobL = (y * 13) % 9, wobR = (y * 7) % 7;
@@ -119,12 +129,8 @@ public partial class OverworldRoot : Node2D
 		Paint(90, 63, 97, 66, 3);                                            // 官道渡滩
 		Paint(88, 96, 95, 99, 3);                                            // 南渡滩
 
-		// 官道:西起帅帐,东抵虏帐
+		// 官道:西起帅帐,东抵虏帐(压过一切地貌——路就是给人走的)
 		for (int x = 0; x < TW; x++) { Set(x, 64, 4); Set(x, 65, 4); }
-
-		// 零星小林与丘
-		Paint(30, 30, 40, 38, 1); Paint(58, 88, 68, 96, 1); Paint(160, 30, 172, 40, 1);
-		Paint(44, 14, 58, 20, 5); Paint(150, 96, 166, 104, 5);
 
 		// 混沌瘴土(东南):连虏骑都绕开的地方——踏入者,心神日蚀
 		Paint(168, 106, 197, 127, 9);
@@ -145,7 +151,8 @@ public partial class OverworldRoot : Node2D
 		return _t[x, y];
 	}
 	private static bool Passable(byte t) => t != 2 && t != 5;
-	private static float SpeedMult(byte t) => t switch { 1 => 0.55f, 3 => 0.45f, 4 => 1.45f, 9 => 0.8f, _ => 1f };
+	private static float SpeedMult(byte t) => t switch
+	{ 1 => 0.55f, 3 => 0.45f, 4 => 1.45f, 9 => 0.8f, 10 => 0.7f, 11 => 0.5f, _ => 1f };
 
 	private Vector2 CamOffset() => ViewCenter - _pos;
 
@@ -381,10 +388,15 @@ public partial class OverworldRoot : Node2D
 					1 => new Color("2e4023"), 2 => new Color("2d4d5e"), 3 => new Color("3e6172"),
 					4 => new Color("6b5b3e"), 5 => new Color("55504a"), 6 => new Color("5a4632"),
 					7 => new Color("46404a"), 8 => new Color("6e5b41"), 9 => new Color("39283f"),
+					10 => new Color("4d4836"), 11 => new Color("2c4136"),
 					_ => new Color("4a5232")
 				};
 				if (((x + y) & 1) == 0) c = c.Darkened(0.05f);
+				// 高度浮雕:热力图打明暗——山脊承光,洼地沉影(地形一眼可读)
+				float relief = (_height[x, y] - 0.5f) * 0.22f;
+				c = relief >= 0 ? c.Lightened(relief) : c.Darkened(-relief);
 				if (_t[x, y] == 9 && ((x * 7 + y * 13) % 11) == 0) c = c.Lightened(0.07f);   // 瘴土磷光斑
+				if (_t[x, y] == 11 && ((x * 5 + y * 11) % 13) == 0) c = c.Lightened(0.05f);  // 泽地水洼
 				DrawRect(new Rect2(x * TS, y * TS, TS, TS), c, true);
 			}
 
@@ -396,54 +408,35 @@ public partial class OverworldRoot : Node2D
 		DrawLabel(new Vector2(184 * TS, 55 * TS), "虏帐", new Color("bcd2ec"));
 		DrawLabel(new Vector2(31 * TS, 97 * TS), "边镇", new Color("c8bfa8"));
 
-		// 当面之敌(扼守岭东)
+		// 当面之敌(扼守岭东):兵形五十抽一——望之知其众寡
 		if (!GameState.I.EnemyDefeated)
 		{
-			DrawCircle(_enemy, 8f, new Color(0.08f, 0.08f, 0.1f));
-			DrawCircle(_enemy + new Vector2(7, -3), 5f, new Color(0.08f, 0.08f, 0.1f));
-			DrawCircle(_enemy + new Vector2(-7, 2), 5f, new Color(0.08f, 0.08f, 0.1f));
-			for (int i = 0; i < 3; i++)
-			{
-				float ph = ((float)_t0 * 0.7f + i * 0.33f) % 1f;
-				DrawCircle(_enemy + new Vector2(-9 - ph * 15, -3 - ph * 9), 3f + ph * 6f,
-					new Color(0.6f, 0.56f, 0.48f, 0.35f * (1 - ph)));
-			}
-			DrawLabel(_enemy + new Vector2(0, -22), "当面之敌", new Color("bcd2ec"));
+			bool foeMoving = (_enemy - EnemyPost).Length() > 24f;
+			if (foeMoving) DrawDust(_enemy, (_pos.X < _enemy.X) ? 1f : -1f);
+			DrawTroops(_enemy, FoeHostMen, new Color(0.09f, 0.09f, 0.12f), _pos.X < _enemy.X ? -1f : 1f, foeMoving);
+			DrawLabel(_enemy + new Vector2(0, -26), "当面之敌", new Color("bcd2ec"));
 		}
 
-		// 行营(周崇大军驻地):谒见、领粮之处
+		// 行营(周崇大军驻地):谒见、领粮之处——大军自然是黑压压一片
 		{
 			var ap = GameState.I.ArmyPos;
-			for (int i = 0; i < 10; i++)
-			{
-				var off = new Vector2(34f - i * 15f, ((i * 37) % 3 - 1) * 5f);
-				DrawCircle(ap + off, 4.6f, new Color(0.34f, 0.14f, 0.11f).Darkened(i % 3 * 0.06f));
-			}
-			DrawFlag(ap + new Vector2(12, -6), new Color("e6c25c"));
-			DrawFlag(ap + new Vector2(-44, -2), new Color("a8352a"));
-			DrawLabel(ap + new Vector2(0, -42), "行营 · 周崇", new Color("e6c25c"));
+			DrawTroops(ap, 2400, new Color(0.34f, 0.14f, 0.11f), 1f, moving: false);
+			DrawFlag(ap + new Vector2(12, -10), new Color("e6c25c"));
+			DrawFlag(ap + new Vector2(-52, -6), new Color("a8352a"));
+			DrawLabel(ap + new Vector2(0, -44), "行营 · 周崇", new Color("e6c25c"));
 			if (NearHq)
-				DrawLabel(ap + new Vector2(0, 46), "E = 谒见行营", new Color("f2e6c8"));
+				DrawLabel(ap + new Vector2(0, 48), "E = 谒见行营", new Color("f2e6c8"));
 		}
 
 		DrawLabel(new Vector2(182 * TS, 112 * TS), "混沌瘴土", new Color(0.62f, 0.45f, 0.68f, 0.85f));
 
-		// 我方仪仗(一队人马 + 牙旗;将军立绘在中军帐/营区)
+		// 我方行军纵队(兵形五十抽一 + 牙旗;将军立绘只在中军帐/营区)
 		float fx = _faceLeft ? -1f : 1f;
-		if (_moving)
-			for (int i = 0; i < 3; i++)
-			{
-				float ph = ((float)_t0 * 0.8f + i * 0.33f) % 1f;
-				DrawCircle(_pos + new Vector2((-10 - ph * 14) * fx, -1 - ph * 7), 2.5f + ph * 4.5f,
-					new Color(0.62f, 0.58f, 0.5f, 0.3f * (1 - ph)));
-			}
-		var umber = new Color(0.42f, 0.16f, 0.12f);
-		DrawCircle(_pos + new Vector2(-7 * fx, 3), 5f, umber.Darkened(0.15f));
-		DrawCircle(_pos + new Vector2(2 * fx, -1), 6f, umber);
-		DrawCircle(_pos + new Vector2(10 * fx, 3), 4.5f, umber.Darkened(0.1f));
+		if (_moving) DrawDust(_pos, fx);
+		DrawTroops(_pos, GameState.I.OwnTotal, new Color(0.42f, 0.16f, 0.12f), fx, _moving);
 		DrawLine(_pos + new Vector2(2 * fx, -4), _pos + new Vector2(2 * fx, -26), new Color("c8b088"), 2f);
 		DrawColoredPolygon(new[] { _pos + new Vector2(2 * fx, -26), _pos + new Vector2(2 * fx + 15 * fx, -21.5f), _pos + new Vector2(2 * fx, -17) }, new Color("d9b34a"));
-		DrawLabel(_pos + new Vector2(0, -34), "本部", new Color("ffd9a0"));
+		DrawLabel(_pos + new Vector2(0, -36), $"本部 · {GameState.I.OwnTotal}", new Color("ffd9a0"));
 
 		if (_moveTarget is { } t2)
 			DrawArc(t2, 7f, 0, Mathf.Tau, 16, new Color(1, 1, 1, 0.5f), 1.5f);
@@ -541,13 +534,60 @@ public partial class OverworldRoot : Node2D
 				{
 					1 => new Color("2e4023"), 2 or 3 => new Color("2d4d5e"), 4 => new Color("6b5b3e"),
 					5 => new Color("55504a"), 6 => new Color("d9b34a"), 7 => new Color("8ab"),
-					8 => new Color("6e5b41"), 9 => new Color("4a3555"), _ => new Color("3c412a")
+					8 => new Color("6e5b41"), 9 => new Color("4a3555"),
+					10 => new Color("4d4836"), 11 => new Color("2c4136"),
+					_ => new Color("3c412a")
 				};
+				float rel = (_height[x, y] - 0.5f) * 0.2f;
+				c = rel >= 0 ? c.Lightened(rel) : c.Darkened(-rel);
 				DrawRect(new Rect2(org.X + x * TS * MS, org.Y + y * TS * MS, TS * MS * 3, TS * MS * 3), c, true);
 			}
-		DrawCircle(org + _pos * MS, 3f, new Color("ffd9a0"));
+		DrawGeneralMark(org + _pos * MS);                                 // 小图上的你=将军本人(大图上是队伍)
 		DrawRect(new Rect2(org + GameState.I.ArmyPos * MS - new Vector2(2.5f, 2.5f), new Vector2(5, 5)), new Color("d9b34a"), true);
 		if (!GameState.I.EnemyDefeated) DrawCircle(org + _enemy * MS, 3f, new Color(0.1f, 0.1f, 0.12f));
+	}
+
+	/// <summary>当面之敌的号称兵力(黑松岭一路;望之知势,细数得靠塘骑)。</summary>
+	private const int FoeHostMen = 1000;
+
+	/// <summary>
+	/// 一支队伍的兵形(五十抽一,封顶三十人):三人一列的行军纵队——
+	/// 大图见军势不见全军;人多则纵队拖得长,望一眼便知是股大队还是游哨。
+	/// </summary>
+	private void DrawTroops(Vector2 pos, int men, Color coat, float fx, bool moving)
+	{
+		int figs = Math.Clamp((men + 49) / 50, 1, 30);
+		for (int i = figs - 1; i >= 0; i--)
+		{
+			int row = i / 3, col = i % 3;
+			float jx = ((i * 37) % 5 - 2) * 0.8f, jy = ((i * 53) % 5 - 2) * 0.9f;
+			float bob = moving ? Mathf.Sin((float)_t0 * 7f + i * 1.7f) * 0.9f : 0f;
+			var p = pos + new Vector2(-(row * 6.8f + (col - 1) * 1.2f) * fx + jx, (col - 1) * 5.6f + jy + bob);
+			DrawCircle(p, 2.4f, coat.Darkened((i * 29 % 4) * 0.05f));                          // 甲身
+			DrawCircle(p + new Vector2(0, -2.4f), 1.1f, new Color("c9a684").Darkened((i * 13 % 3) * 0.08f));   // 兜鍪下的脸
+		}
+	}
+
+	/// <summary>行军扬尘(队尾方向)。</summary>
+	private void DrawDust(Vector2 pos, float fx)
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			float ph = ((float)_t0 * 0.8f + i * 0.33f) % 1f;
+			DrawCircle(pos + new Vector2((-10 - ph * 14) * fx, -1 - ph * 7), 2.5f + ph * 4.5f,
+				new Color(0.62f, 0.58f, 0.5f, 0.3f * (1 - ph)));
+		}
+	}
+
+	/// <summary>小地图上的将军小像(盔缨+金圈):小图见将,大图见军——你既是一杆旗,也是一个人。</summary>
+	private void DrawGeneralMark(Vector2 p)
+	{
+		DrawCircle(p, 4.4f, new Color(0f, 0f, 0f, 0.55f));                                                       // 衬底
+		DrawRect(new Rect2(p + new Vector2(-1.6f, -0.5f), new Vector2(3.2f, 3.6f)), new Color("7a2a20"), true);  // 甲身
+		DrawCircle(p + new Vector2(0, -1.8f), 1.7f, new Color("d8b090"));                                        // 面
+		DrawRect(new Rect2(p + new Vector2(-2.0f, -4.0f), new Vector2(4.0f, 1.4f)), new Color("6b3a28"), true);  // 盔檐
+		DrawLine(p + new Vector2(0, -4.0f), p + new Vector2(0, -6.2f), new Color("c4453a"), 1.4f);               // 红缨
+		DrawArc(p, 4.4f, 0, Mathf.Tau, 14, new Color("e6c25c"), 1.2f);                                           // 金圈定位
 	}
 
 	private void DrawFlag(Vector2 p, Color c)

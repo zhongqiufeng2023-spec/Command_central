@@ -40,13 +40,15 @@ public partial class BattleRoot
 					{
 						BTerrain.Road => new Color("6b5b3e"), BTerrain.Forest => new Color("2e4023"),
 						BTerrain.Hill => new Color("575040"), BTerrain.River => new Color("2d4d5e"),
-						BTerrain.Ford => new Color("3e6172"), _ => new Color("4a4332")
+						BTerrain.Ford => new Color("3e6172"), BTerrain.Marsh => new Color("2c4136"),
+						_ => new Color("4a4332")
 					}
 					: t switch
 					{
 						BTerrain.Road => new Color("4e4433"), BTerrain.Forest => new Color("39412e"),
 						BTerrain.Hill => new Color("454034"), BTerrain.River => new Color("31434d"),
-						BTerrain.Ford => new Color("3d5560"), _ => new Color("3a372c")
+						BTerrain.Ford => new Color("3d5560"), BTerrain.Marsh => new Color("31413a"),
+						_ => new Color("3a372c")
 					};
 				DrawRect(new Rect2(p, new Vector2(ts + 1, ts + 1)), c, true);
 			}
