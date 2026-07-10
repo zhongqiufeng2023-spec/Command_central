@@ -64,12 +64,6 @@ public partial class TentRoot
 					: o.State == CommandPost.Core.BObjectiveState.Failed ? "d97a6a" : "c8c2b4");
 			}
 		}
-		else if (GameState.I.Fallen)
-		{
-			L("案上只余半页焦纸——皇命已随行营一同烧成了灰。", 12, "c8c2b4");
-			L("自此,没有人再命令你。下一道「军令」,得你自己写。", 12, "c8c2b4", 4);
-			L($"粮草 {(int)GameState.I.Grain} · 士卒疲惫 {(int)GameState.I.Fatigue}", 12, "d8d2c4");
-		}
 		else
 		{
 			L("〔征虏皇命〕敕曰:虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 12, "c8c2b4");
