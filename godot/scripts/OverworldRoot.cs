@@ -29,13 +29,10 @@ public partial class OverworldRoot : Node2D
 	private Font _font = null!;
 	private readonly PauseOverlay _menu = new();
 
-	// —— 事件层:大军(兵团)剧本 / 虏帐章末 / 敌情预警 ——
+	// —— 事件层:皇命 / 虏帐 / 敌情预警(无章节剧本:开局即自由,皇命给目标与约束)——
 	private static readonly Vector2 FoeCamp = new(184 * TS, 62 * TS);     // 虏帐
-	private static readonly Vector2 CampSite = new(84 * TS, 64 * TS);     // 第一幕:大军至涧水渡西岸立营
-	private static readonly Vector2 FoeApproach = new(177 * TS, 63 * TS); // 第三幕:大军兵临虏帐
-	private bool _armyMoving;
 	private bool _letterOpen;                                             // 谒见军令卷轴
-	private bool _ending;                                                 // 章末结算
+	private bool _ending;                                                 // 靖边结算
 	private bool _warnedSighting;
 	private double _engageGrace;                                          // 上图后的接敌保护期(防秒接敌死循环)
 	private bool _duskPrompted;                                           // 每晚只提醒一次「歇营还是兼程」
@@ -86,59 +83,16 @@ public partial class OverworldRoot : Node2D
 		if (GameState.I.PendingBanner != "")
 		{ _banner = GameState.I.PendingBanner; _bannerAge = 0; GameState.I.PendingBanner = ""; }
 
-		// 章节剧本推进:破敌归来 → 中军令「归建复命」
-		if (GameState.I.Beat == 1 && GameState.I.EnemyDefeated)
+		// 开局皇命:首次上图自动展卷(此后随时可去行营再看)
+		if (!GameState.I.OrderRead)
 		{
-			GameState.I.Beat = 2;
+			GameState.I.OrderRead = true;
 			_letterOpen = true;
-			Sfx.Play(this, Sfx.Horn, -7f);
+			Sfx.Play(this, Sfx.Horn, -6f);
 		}
 
 		GameState.I.SaveRun();                          // 上大地图即落一笔存档(战毕班师也走这里)
 		GetWindow().GrabFocus();
-	}
-
-	/// <summary>随军中(0/3 拍):你是大军的前锋一部,不得擅离队列。</summary>
-	private static bool Locked => GameState.I.ArmyLocked;
-
-	/// <summary>大军行军与章节节拍(一切服务于剧情;第二章换一套剧本)。</summary>
-	private void UpdateArmyMarch(float dt)
-	{
-		var gs = GameState.I;
-		var target = gs.Beat == 0 ? CampSite : FoeApproach;
-		var d = target - gs.ArmyPos;
-		_armyMoving = d.Length() > 8f;
-
-		if (_armyMoving)
-		{
-			float hours = dt * 1.2f;
-			gs.CampaignHours += hours;
-			gs.Grain = Math.Max(0, gs.Grain - hours * 1.1f);
-			gs.Fatigue = Math.Min(100, gs.Fatigue + hours * 2.2f);
-			float speed = 62f * SpeedMult(At(gs.ArmyPos)) * (NightFactor > 0.6f ? 0.75f : 1f);
-			gs.ArmyPos += d.Normalized() * speed * dt;
-		}
-		else if (gs.Beat == 0)
-		{
-			// 第一幕毕:大军立营涧水渡——中军令下,你部前出(限三日)
-			gs.Beat = 1;
-			gs.MissionDeadline = gs.CampaignHours + 72f;
-			_letterOpen = true;
-			Sfx.Play(this, Sfx.Horn, -6f);
-			gs.SaveRun();
-		}
-		else if (gs.Beat == 3 && !_ending)
-		{
-			// 第三幕毕:兵临虏帐,章末
-			_ending = true;
-			Sfx.Play(this, Sfx.Horn, -5f);
-		}
-
-		// 你随队而行(本部在纵队前段)
-		_pos = gs.ArmyPos + new Vector2(52, 24);
-		GameState.I.PartyPos = _pos;
-		_faceLeft = d.X < 0 && _armyMoving;
-		_moving = _armyMoving;
 	}
 
 	private void BuildMap()
@@ -199,29 +153,10 @@ public partial class OverworldRoot : Node2D
 		if (_menu.Open || _letterOpen || _ending) { QueueRedraw(); return; }
 		float dt = (float)delta;
 
-		// —— 随军行军(0/3 拍):大军开路,你在队列里——中军令未下,不得擅动 ——
-		if (Locked)
-		{
-			UpdateArmyMarch(dt);
-			QueueRedraw();
-			return;
-		}
-
-		// —— 归建(第 2 拍):抵大军处复命 → 第三幕 ——
-		if (GameState.I.Beat == 2 && _pos.DistanceTo(GameState.I.ArmyPos) < 110f)
-		{
-			GameState.I.Beat = 3;
-			_letterOpen = true;
-			Sfx.Play(this, Sfx.Drum, -6f);
-			SyncState(); GameState.I.SaveRun();
-			QueueRedraw();
-			return;
-		}
-
-		// —— 任务时效:限期已过而虏未破 → 行营催令(每过一日再催,信任累扣)——
+		// —— 皇命时效:限期已过而虏未破 → 行营催令(每过一日再催,信任累扣)——
 		{
 			var gsD = GameState.I;
-			if (gsD.Beat == 1 && gsD.MissionDeadline > 0 && gsD.CampaignHours > gsD.MissionDeadline && !gsD.EnemyDefeated)
+			if (gsD.MissionDeadline > 0 && gsD.CampaignHours > gsD.MissionDeadline && !gsD.EnemyDefeated)
 			{
 				gsD.MissionDeadline += 24f;
 				gsD.Trust = Math.Max(0, gsD.Trust - 5);
@@ -290,14 +225,19 @@ public partial class OverworldRoot : Node2D
 			if (gs.Grain >= 10f) _grainWarned10 = false;
 		}
 
-		// —— 事件:虏帐(章末由大军兵临触发;你单独摸过去没用)——
+		// —— 事件:虏帐(破当面之虏后,兵抵虏帐=靖边)——
 		if (_pos.DistanceTo(FoeCamp) < 120f)
 		{
-			_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
-			_banner = GameState.I.EnemyDefeated
-				? "虏帐残守犹在——归建复命,随大军同进,毕其功于一役。"
-				: "虏帐守备森严,游骑四出——先破当面之虏,再图斯地。";
-			_bannerAge = 0;
+			if (GameState.I.EnemyDefeated)
+			{
+				if (!_ending) Sfx.Play(this, Sfx.Horn, -5f);
+				_ending = true; _moveTarget = null;
+			}
+			else
+			{
+				_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
+				_banner = "虏帐守备森严,游骑四出——先破当面之虏,再图斯地。"; _bannerAge = 0;
+			}
 		}
 
 		// —— 当面之敌:扼守黑松岭东缘;你进抵岭一线(靠近)即出而接敌 ——
@@ -355,11 +295,7 @@ public partial class OverworldRoot : Node2D
 					SyncState(); GameState.I.SaveRun(); GetTree().Quit(); return;
 			}
 			if (consumed) return;
-			if (k.Keycode is Key.C or Key.R && Locked)
-			{
-				_banner = "随军行军,不得擅自扎营——中军将令未下。"; _bannerAge = 0;
-			}
-			else if (k.Keycode == Key.C)
+			if (k.Keycode == Key.C)
 			{
 				SyncState();
 				GameState.I.CampOnly = true; GameState.I.Battle = null;
@@ -398,7 +334,7 @@ public partial class OverworldRoot : Node2D
 				}
 			}
 		}
-		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending && !Locked)
+		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
 			_moveTarget = mb.Position - CamOffset();
 	}
 
@@ -451,7 +387,7 @@ public partial class OverworldRoot : Node2D
 			DrawLabel(_enemy + new Vector2(0, -22), "当面之敌", new Color("bcd2ec"));
 		}
 
-		// 大军(中军纵队):你是它的前锋一部。离队在外时,画的是「所知」——它照剧本行止,不是实时侦得
+		// 行营(周崇大军驻地):谒见、领粮之处
 		{
 			var ap = GameState.I.ArmyPos;
 			for (int i = 0; i < 10; i++)
@@ -461,17 +397,9 @@ public partial class OverworldRoot : Node2D
 			}
 			DrawFlag(ap + new Vector2(12, -6), new Color("e6c25c"));
 			DrawFlag(ap + new Vector2(-44, -2), new Color("a8352a"));
-			if (Locked && _armyMoving)
-				for (int i = 0; i < 4; i++)
-				{
-					float ph = ((float)_t0 * 0.7f + i * 0.25f) % 1f;
-					DrawCircle(ap + new Vector2(-64 - ph * 22, -2 - ph * 8), 3f + ph * 6f,
-						new Color(0.62f, 0.58f, 0.5f, 0.3f * (1 - ph)));
-				}
-			DrawLabel(ap + new Vector2(0, -42), Locked ? "大军 · 中军" : "大军 · 中军(所知)",
-				new Color(0.9f, 0.76f, 0.36f, Locked ? 1f : 0.75f));
+			DrawLabel(ap + new Vector2(0, -42), "行营 · 周崇", new Color("e6c25c"));
 			if (NearHq)
-				DrawLabel(ap + new Vector2(0, 46), "E = 谒见中军", new Color("f2e6c8"));
+				DrawLabel(ap + new Vector2(0, 46), "E = 谒见行营", new Color("f2e6c8"));
 		}
 
 		// 我方仪仗(一队人马 + 牙旗;将军立绘在中军帐/营区)
@@ -505,18 +433,11 @@ public partial class OverworldRoot : Node2D
 		{
 			var gs = GameState.I;
 			float left = gs.MissionDeadline - gs.CampaignHours;
-			string line = gs.Beat switch
-			{
-				0 => "随军东进——中军将令未下,不得擅离队列(E=谒见中军)",
-				1 => gs.EnemyDefeated
-					? "虏已破——候归建之令,或先扎营休整(C/R)"
-					: $"中军令:前出黑松岭,侦破当面之敌{(gs.MissionDeadline < 0 ? "" : left > 0 ? $"——限期余 {(int)left} 时辰" : "——限期已过!")} | WASD行军 C扎营 R歇营",
-				2 => "中军令:归建复命——回大军处(西面,涧水渡营)",
-				3 => "大军拔营,兵临虏帐——随军行进,毕其功于一役",
-				_ => ""
-			};
+			string line = gs.EnemyDefeated
+				? "虏已破——乘胜东进,兵抵虏帐即靖此边(C扎营 R歇营)"
+				: $"皇命:侦破黑松岭当面之虏{(gs.MissionDeadline < 0 ? "" : left > 0 ? $"——限期余 {(int)left} 时辰" : "——限期已过!")} | WASD行军 C扎营 R歇营";
 			DrawString(_font, new Vector2(14, 44), line + " · Esc=菜单", HorizontalAlignment.Left, -1, 12,
-				gs.Beat == 1 && left < 12f && !gs.EnemyDefeated ? new Color("d9917a") : new Color("9aa0a8"));
+				left < 12f && !gs.EnemyDefeated && gs.MissionDeadline > 0 ? new Color("d9917a") : new Color("9aa0a8"));
 		}
 
 		// 后勤条:粮草与疲惫(行军的两本账)
@@ -558,35 +479,22 @@ public partial class OverworldRoot : Node2D
 
 		void L(string s, int size, string col) { DrawString(_font, new Vector2(x, y), s, HorizontalAlignment.Left, (int)w - 80, size, new Color(col)); y += size + 10; }
 
-		switch (GameState.I.Beat)
+		if (!GameState.I.EnemyDefeated)
 		{
-			case 0:
-				L("中军谕示", 20, "e6c25c"); y += 6;
-				L("周崇谕全军:大军东进,至涧水渡立营。", 14, "d8d2c4");
-				L("各部依序而行,毋得喧哗掉队。前锋听候将令。", 14, "c8c2b4"); y += 8;
-				L("——随军行进中;至渡口,自有你的差事。", 12, "9aa0a8");
-				break;
-			case 1 when !GameState.I.EnemyDefeated:
-				L("征虏中军令", 20, "e6c25c"); y += 6;
-				L("周崇谕前锋总兵官:", 14, "d8d2c4");
-				L("虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 14, "c8c2b4");
-				L("命尔部即日前出,进抵岭一线;虏情务须侦明,军书具报,", 14, "c8c2b4");
-				L("相机破之。限三日。朝廷候捷,毋纵毋怠。", 14, "c8c2b4"); y += 8;
-				L($"——限期:第 {(int)(GameState.I.MissionDeadline / 24f) + 1} 日前。行军中扎营(C)可入中军帐;战起先布阵再擂鼓。", 12, "9aa0a8");
-				break;
-			case 1:
-			case 2:
-				L("归建令", 20, "e6c25c"); y += 6;
-				L($"「黑松岭之捷,行营已录。今主帅信任 {GameState.I.Trust}。」", 14, "d8d2c4");
-				if (GameState.I.LastVerdict is { } v) L($"上战裁断:「{v.VerdictCn}」", 14, "c8c2b4");
-				L("「着尔部即归建复命——大军在涧水渡营候尔。」", 14, "c8c2b4"); y += 8;
-				L("——回到大军处(西面),即领下一道将令。", 12, "9aa0a8");
-				break;
-			default:
-				L("周帅嘉勉", 20, "e6c25c"); y += 6;
-				L("「虏酋新败,巢帐空虚——全军拔营,东捣虏帐,毕其功于一役!」", 14, "c8c2b4"); y += 8;
-				L("——随军行进;兵临虏帐,即结此章。", 12, "9aa0a8");
-				break;
+			L("征虏皇命", 20, "e6c25c"); y += 6;
+			L("敕曰:虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 14, "c8c2b4");
+			L("命尔部即日进兵,虏情务须侦明,军书具报,相机破之。", 14, "c8c2b4");
+			L("限三日。军饷粮草如额拨付,毋掠民,毋纵虏。", 14, "c8c2b4"); y += 8;
+			L($"——限期:第 {(int)(Math.Max(0f, GameState.I.MissionDeadline) / 24f) + 1} 日前。逾期行营催令,主帅信任日削。", 12, "9aa0a8");
+			L("——如何用兵、何时接战、走哪条路,悉听尔便。", 12, "9aa0a8");
+		}
+		else
+		{
+			L("周帅嘉勉", 20, "e6c25c"); y += 6;
+			L($"「黑松岭之捷,行营已录。今主帅信任 {GameState.I.Trust}。」", 14, "d8d2c4");
+			if (GameState.I.LastVerdict is { } v) L($"上战裁断:「{v.VerdictCn}」", 14, "c8c2b4");
+			L("「虏酋新败,巢帐空虚——乘胜东捣虏帐,毕其功于一役!」", 14, "c8c2b4"); y += 8;
+			L("——兵抵虏帐,即靖此边。", 12, "9aa0a8");
 		}
 		DrawString(_font, new Vector2(x, box.End.Y - 30), "E / 回车 · 领命", HorizontalAlignment.Left, -1, 13, new Color("e6c25c"));
 	}
@@ -601,7 +509,7 @@ public partial class OverworldRoot : Node2D
 		DrawRect(box, new Color(0.10f, 0.09f, 0.07f, 0.98f), true);
 		DrawRect(box, new Color("d9b34a"), false, 2f);
 		float y = box.Position.Y + 64;
-		DrawString(_font, new Vector2(0, y), "第一章 · 黑松岭 —— 完", HorizontalAlignment.Center, 1120, 26, new Color("e6c25c")); y += 44;
+		DrawString(_font, new Vector2(0, y), "黑松岭靖边 —— 边野暂安", HorizontalAlignment.Center, 1120, 26, new Color("e6c25c")); y += 44;
 		DrawString(_font, new Vector2(0, y), "虏帐已空,残部远遁漠北。边野暂靖。", HorizontalAlignment.Center, 1120, 14, new Color("c8c2b4")); y += 30;
 		DrawString(_font, new Vector2(0, y), $"用时 {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Center, 1120, 14, new Color("d8d2c4")); y += 26;
 		if (GameState.I.LastVerdict is { } v)

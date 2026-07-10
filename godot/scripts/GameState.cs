@@ -28,15 +28,13 @@ public partial class GameState : Node
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
 
-	// —— 兵团与章节剧本(一切服务于剧情;每章换一套 beat)——
-	/// <summary>大军(中军纵队)位置:你是它的前锋一部——平时随军行军,奉令才可自由行动。</summary>
+	// —— 皇命与行营(无章节剧本:开局即自由,皇命给目标与约束)——
+	/// <summary>行营(周崇大军)驻地:谒见、领粮之处。</summary>
 	public Vector2 ArmyPos = new(24 * 16, 64 * 16);
-	/// <summary>第一章节拍:0=随军东进 1=前出侦破(自由) 2=归建复命(自由) 3=随军进岭 4=章末。</summary>
-	public int Beat;
-	/// <summary>随军中(0/3 拍):不得擅离队列。</summary>
-	public bool ArmyLocked => Beat is 0 or 3;
-	/// <summary>当前任务限期(行军历小时;<0=无限期)。逾期=催令+信任惩罚。</summary>
+	/// <summary>当前皇命限期(行军历小时;<0=无限期)。逾期=催令+信任惩罚。</summary>
 	public float MissionDeadline = -1f;
+	/// <summary>开局皇命是否已宣读(首次上大地图自动展卷)。</summary>
+	public bool OrderRead;
 
 	/// <summary>回大地图时要弹的横幅(如战罢脱离接触)——Overworld._Ready 取走即清。</summary>
 	public string PendingBanner = "";
@@ -137,7 +135,8 @@ public partial class GameState : Node
 		PartyPos = new Vector2(26 * 16, 66 * 16);
 		EnemyPos = new Vector2(150 * 16, 64 * 16);
 		ArmyPos = new Vector2(24 * 16, 64 * 16);
-		Beat = 0; MissionDeadline = -1f;
+		MissionDeadline = 8f + 72f;                          // 皇命限三日(行军历自辰时起)
+		OrderRead = false;
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
@@ -156,7 +155,7 @@ public partial class GameState : Node
 			["diff"] = (int)Difficulty,
 			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
 			["bones"] = Bones, ["san"] = San,
-			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["beat"] = Beat, ["deadline"] = MissionDeadline,
+			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["deadline"] = MissionDeadline, ["orderread"] = OrderRead,
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -185,8 +184,8 @@ public partial class GameState : Node
 		Bones = d.ContainsKey("bones") ? d["bones"].AsInt32() : 0;
 		San = d.ContainsKey("san") ? d["san"].AsSingle() : 75f;
 		ArmyPos = d.ContainsKey("ax") ? new Vector2(d["ax"].AsSingle(), d["ay"].AsSingle()) : new Vector2(24 * 16, 64 * 16);
-		Beat = d.ContainsKey("beat") ? d["beat"].AsInt32() : 1;
 		MissionDeadline = d.ContainsKey("deadline") ? d["deadline"].AsSingle() : -1f;
+		OrderRead = !d.ContainsKey("orderread") || d["orderread"].AsBool();
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;
