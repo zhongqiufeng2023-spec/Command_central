@@ -36,6 +36,11 @@ public partial class GameState : Node
 	/// <summary>开局皇命是否已宣读(首次上大地图自动展卷)。</summary>
 	public bool OrderRead;
 
+	/// <summary>本部六队现员(伤亡跨战延续;行营谒见可补员)。索引对应 BattleScenario.OwnUnitNames。</summary>
+	public int[] OwnStrength = (int[])BattleScenario.OwnFullStrength.Clone();
+	public int OwnTotal { get { int s = 0; foreach (var v in OwnStrength) s += v; return s; } }
+	public static int OwnFullTotal { get { int s = 0; foreach (var v in BattleScenario.OwnFullStrength) s += v; return s; } }
+
 	/// <summary>回大地图时要弹的横幅(如战罢脱离接触)——Overworld._Ready 取走即清。</summary>
 	public string PendingBanner = "";
 
@@ -62,7 +67,7 @@ public partial class GameState : Node
 
 	public void StartBattle()
 	{
-		Battle = BattleScenario.BlackPineField(_battleSeed++);
+		Battle = BattleScenario.BlackPineField(_battleSeed++, deploy: true, ownCounts: OwnStrength);
 		Battle.Difficulty = BDifficultyProfile.Of(Difficulty);
 		CampOnly = false;
 
@@ -96,7 +101,14 @@ public partial class GameState : Node
 		{
 			foreach (var u in Battle.Units)
 				if (u.Side == CommandPost.Core.Side.Friend && !u.Allied)
+				{
 					Bones += System.Math.Max(0, u.MaxCount - u.AliveCount - u.Fled);
+					// 损耗回写(跨战延续):存活 + 收拢溃卒之半——万骨枯不是一句台词
+					int idx = System.Array.IndexOf(BattleScenario.OwnUnitNames, u.Name);
+					if (idx >= 0)
+						OwnStrength[idx] = System.Math.Clamp(u.AliveCount + u.Fled / 2,
+							0, BattleScenario.OwnFullStrength[idx]);
+				}
 			// 心神结转:胜可回血,败与折损都是磨蚀
 			float swing = Battle.Winner == CommandPost.Core.Side.Friend ? 10f
 						: Battle.Winner == CommandPost.Core.Side.Enemy ? -15f : -5f;
@@ -137,6 +149,7 @@ public partial class GameState : Node
 		ArmyPos = new Vector2(24 * 16, 64 * 16);
 		MissionDeadline = 8f + 72f;                          // 皇命限三日(行军历自辰时起)
 		OrderRead = false;
+		OwnStrength = (int[])BattleScenario.OwnFullStrength.Clone();
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
@@ -156,6 +169,7 @@ public partial class GameState : Node
 			["hours"] = CampaignHours, ["grain"] = Grain, ["fatigue"] = Fatigue,
 			["bones"] = Bones, ["san"] = San,
 			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["deadline"] = MissionDeadline, ["orderread"] = OrderRead,
+			["strength"] = string.Join(",", OwnStrength),
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -186,6 +200,14 @@ public partial class GameState : Node
 		ArmyPos = d.ContainsKey("ax") ? new Vector2(d["ax"].AsSingle(), d["ay"].AsSingle()) : new Vector2(24 * 16, 64 * 16);
 		MissionDeadline = d.ContainsKey("deadline") ? d["deadline"].AsSingle() : -1f;
 		OrderRead = !d.ContainsKey("orderread") || d["orderread"].AsBool();
+		OwnStrength = (int[])BattleScenario.OwnFullStrength.Clone();
+		if (d.ContainsKey("strength"))
+		{
+			var parts = d["strength"].AsString().Split(',');
+			for (int i = 0; i < parts.Length && i < OwnStrength.Length; i++)
+				if (int.TryParse(parts[i], out int sv))
+					OwnStrength[i] = System.Math.Clamp(sv, 0, BattleScenario.OwnFullStrength[i]);
+		}
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;

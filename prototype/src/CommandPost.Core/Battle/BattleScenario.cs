@@ -17,17 +17,34 @@ public static class BattleScenario
     /// 敌军分梯次进兵(骑射游哨先动、突骑部众后继),不再一开场就压到家门口。
     /// 玩家在西侧帅帐,只看沙盘;敌军与友邻均 AI 驱动。
     /// </summary>
-    public static BattleSim BlackPineField(int seed = 20260703, bool deploy = true)
+    /// <summary>本路六队的满编(建军序列固定;沙盒层按此索引记损耗)。</summary>
+    public static readonly int[] OwnFullStrength = { 240, 220, 250, 200, 160, 180 };
+    /// <summary>本路六队队名(损耗回写按名对位——缺编不错位)。</summary>
+    public static readonly string[] OwnUnitNames = { "枪队", "陌刀队", "盾队", "弩队", "游骑", "铁骑" };
+
+    public static BattleSim BlackPineField(int seed = 20260703, bool deploy = true, int[]? ownCounts = null)
     {
         var sim = new BattleSim(BuildMap(), new Rng(seed)) { HqPos = new Vec2F(60, 272 + NorthShift) };
 
-        // —— 大酆(西,本路)——
-        sim.AddUnit(Side.Friend, UnitType.Spear,      "枪队",   new Commander("王朗",   Personality.Steady,     0.80), S(150, 190), 240);
-        sim.AddUnit(Side.Friend, UnitType.MoDao,      "陌刀队", new Commander("何武",   Personality.Steady,     0.82), S(150, 250), 220);
-        sim.AddUnit(Side.Friend, UnitType.Shield,     "盾队",   new Commander("周石",   Personality.Cautious,   0.78), S(150, 310), 250);
-        sim.AddUnit(Side.Friend, UnitType.Bow,        "弩队",   new Commander("李彀",   Personality.Cautious,   0.75), S(110, 350), 200);
-        sim.AddUnit(Side.Friend, UnitType.Cavalry,    "游骑",   new Commander("秦锐",   Personality.Aggressive, 0.70), S(170, 420), 160);
-        sim.AddUnit(Side.Friend, UnitType.Cataphract, "铁骑",   new Commander("呼延豹", Personality.Aggressive, 0.72), S(170, 120), 180);
+        // —— 大酆(西,本路;兵力承接沙盒层的损耗记录——伤亡是跨战延续的)——
+        var own = new (UnitType type, string name, string officer, Personality per, double cap, Vec2F pos)[]
+        {
+            (UnitType.Spear,      "枪队",   "王朗",   Personality.Steady,     0.80, S(150, 190)),
+            (UnitType.MoDao,      "陌刀队", "何武",   Personality.Steady,     0.82, S(150, 250)),
+            (UnitType.Shield,     "盾队",   "周石",   Personality.Cautious,   0.78, S(150, 310)),
+            (UnitType.Bow,        "弩队",   "李彀",   Personality.Cautious,   0.75, S(110, 350)),
+            (UnitType.Cavalry,    "游骑",   "秦锐",   Personality.Aggressive, 0.70, S(170, 420)),
+            (UnitType.Cataphract, "铁骑",   "呼延豹", Personality.Aggressive, 0.72, S(170, 120)),
+        };
+        for (int i = 0; i < own.Length; i++)
+        {
+            int cnt = ownCounts != null && i < ownCounts.Length
+                ? Math.Clamp(ownCounts[i], 0, OwnFullStrength[i])
+                : OwnFullStrength[i];
+            if (cnt < 15) continue;                    // 残不成队:这一队暂缺编(补员后归建)
+            var o = own[i];
+            sim.AddUnit(Side.Friend, o.type, o.name, new Commander(o.officer, o.per, o.cap), o.pos, cnt);
+        }
 
         // —— 草原(远东,AI;远来劫掠的疲师:分梯次进兵——游哨先动,主力后继)——
         foreach (var (type, name, cn, per, cap, pos, cnt, holdT) in new[]

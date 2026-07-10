@@ -322,16 +322,34 @@ public partial class OverworldRoot : Node2D
 			else if (k.Keycode == Key.E && NearHq)
 			{
 				_letterOpen = true; Sfx.Play(this, Sfx.Click);
-				// 顺道领粮:粮官的「鼠耗」是这支军队的固有摩擦
 				var gs = GameState.I;
+				var parts = new System.Collections.Generic.List<string>();
+
+				// 领粮:粮官的「鼠耗」是这支军队的固有摩擦
 				if (gs.Grain < 90f)
 				{
 					int got = 82 + _evRng.Next(19);
 					gs.Grain = got;
-					_pendingBanner = got < 92
-						? $"粮官王禄拨付军粮,点验短了{100 - got}分——曰:『鼠耗』。"
-						: "粮官王禄拨付军粮,足额——今儿太阳打西边出来了。";
+					parts.Add(got < 92
+						? $"粮官王禄拨付军粮,点验短了{100 - got}分——曰:『鼠耗』"
+						: "粮官王禄拨付军粮,足额——今儿太阳打西边出来了");
 				}
+				// 补员:行营拨戍卒填缺(每次谒见补上缺额的六成——余下的,得再跑一趟)
+				int replenished = 0;
+				for (int i = 0; i < gs.OwnStrength.Length; i++)
+				{
+					int deficit = CommandPost.Core.BattleScenario.OwnFullStrength[i] - gs.OwnStrength[i];
+					if (deficit <= 0) continue;
+					int add = Math.Max(deficit > 0 ? 5 : 0, (int)(deficit * 0.6f));
+					add = Math.Min(add, deficit);
+					gs.OwnStrength[i] += add;
+					replenished += add;
+				}
+				if (replenished > 0)
+					parts.Add($"行营拨戍卒 {replenished} 员补入尔部(新卒生疏,聊胜于无)");
+				if (parts.Count > 0)
+					_pendingBanner = string.Join(";", parts) + "。";
+				gs.SaveRun();
 			}
 		}
 		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
@@ -429,7 +447,9 @@ public partial class OverworldRoot : Node2D
 			DrawRect(new Rect2(0, 0, 1120, 760), new Color(0.03f, 0.05f, 0.13f, 0.42f * NightFactor), true);
 
 		// —— HUD 层 ——
-		DrawString(_font, new Vector2(14, 24), $"大酆边野 · {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
+		DrawString(_font, new Vector2(14, 24),
+			$"大酆边野 · {CalendarCn} · 本部 {GameState.I.OwnTotal}/{GameState.OwnFullTotal} · 主帅信任 {GameState.I.Trust}",
+			HorizontalAlignment.Left, -1, 16, new Color("e8e0d0"));
 		{
 			var gs = GameState.I;
 			float left = gs.MissionDeadline - gs.CampaignHours;
