@@ -29,11 +29,15 @@ public partial class OverworldRoot : Node2D
 	private Font _font = null!;
 	private readonly PauseOverlay _menu = new();
 
-	// —— 事件层:皇命 / 虏帐 / 敌情预警(无章节剧本:开局即自由,皇命给目标与约束)——
-	private static readonly Vector2 FoeCamp = new(184 * TS, 62 * TS);     // 虏帐
-	private bool _letterOpen;                                             // 谒见军令卷轴
-	private bool _ending;                                                 // 靖边结算
+	// —— 事件层:皇命 / 覆灭 / 虏帐 / 敌情预警(无章节:序章必败,败后世界全开,行为即选择)——
+	private static readonly Vector2 FoeCamp = new(184 * TS, 62 * TS);     // 虏帐(降人之门)
+	private static readonly Vector2[] RemnantPos =                        // 大军覆灭后,野外溃卒残部
+	{ new(70 * TS, 44 * TS), new(64 * TS, 84 * TS), new(104 * TS, 40 * TS) };
+	private static readonly int[] RemnantMen = { 90, 70, 120 };
+	private bool _letterOpen;                                             // 军书卷轴(皇命/败报)
 	private bool _warnedSighting;
+	private double _pathHintCd;                                           // 路口提示冷却(西官道/虏帐/瘴土)
+	private bool _chaosWhispered;
 	private double _engageGrace;                                          // 上图后的接敌保护期(防秒接敌死循环)
 	private bool _duskPrompted;                                           // 每晚只提醒一次「歇营还是兼程」
 	private bool _grainWarned40, _grainWarned10;
@@ -83,8 +87,21 @@ public partial class OverworldRoot : Node2D
 		if (GameState.I.PendingBanner != "")
 		{ _banner = GameState.I.PendingBanner; _bannerAge = 0; GameState.I.PendingBanner = ""; }
 
+		// 序章·必败的远征:第一仗打完(无论胜负),大军在你看不见的地方覆灭
+		if (!GameState.I.Fallen && GameState.I.BattlesFought > 0)
+		{
+			GameState.I.Fallen = true;
+			GameState.I.MissionDeadline = -1f;          // 皇命成灰,再无人催你
+			GameState.I.EnemyDefeated = true;           // 当面之敌亦卷入大溃之乱,不再纠缠
+		}
+		if (GameState.I.Fallen && !GameState.I.FallRead)
+		{
+			GameState.I.FallRead = true;
+			_letterOpen = true;                         // 败报卷轴
+			Sfx.Play(this, Sfx.Lose, -6f);
+		}
 		// 开局皇命:首次上图自动展卷(此后随时可去行营再看)
-		if (!GameState.I.OrderRead)
+		else if (!GameState.I.OrderRead)
 		{
 			GameState.I.OrderRead = true;
 			_letterOpen = true;
@@ -126,6 +143,9 @@ public partial class OverworldRoot : Node2D
 		Paint(30, 30, 40, 38, 1); Paint(58, 88, 68, 96, 1); Paint(160, 30, 172, 40, 1);
 		Paint(44, 14, 58, 20, 5); Paint(150, 96, 166, 104, 5);
 
+		// 混沌瘴土(东南):连虏骑都绕开的地方——踏入者,心神日蚀
+		Paint(168, 106, 197, 127, 9);
+
 		// 帅帐(周崇,你身后)· 前锋营(你)· 虏帐(远东)· 边镇(西南)
 		Paint(16, 60, 22, 68, 6);
 		Paint(52, 60, 58, 68, 6);
@@ -142,7 +162,7 @@ public partial class OverworldRoot : Node2D
 		return _t[x, y];
 	}
 	private static bool Passable(byte t) => t != 2 && t != 5;
-	private static float SpeedMult(byte t) => t switch { 1 => 0.55f, 3 => 0.45f, 4 => 1.45f, _ => 1f };
+	private static float SpeedMult(byte t) => t switch { 1 => 0.55f, 3 => 0.45f, 4 => 1.45f, 9 => 0.8f, _ => 1f };
 
 	private Vector2 CamOffset() => ViewCenter - _pos;
 
@@ -150,13 +170,30 @@ public partial class OverworldRoot : Node2D
 	{
 		_t0 += delta; _bannerAge += delta;
 		if (_engageGrace > 0) _engageGrace -= delta;
-		if (_menu.Open || _letterOpen || _ending) { QueueRedraw(); return; }
+		if (_pathHintCd > 0) _pathHintCd -= delta;
+		if (_menu.Open || _letterOpen) { QueueRedraw(); return; }
 		float dt = (float)delta;
+
+		// —— 序章兜底:迁延过四日,大军照样覆灭(它的败亡从来不取决于你)——
+		if (!GameState.I.Fallen && GameState.I.CampaignHours > 8f + 96f)
+		{
+			GameState.I.Fallen = true;
+			GameState.I.MissionDeadline = -1f;
+			GameState.I.EnemyDefeated = true;
+		}
+		if (GameState.I.Fallen && !GameState.I.FallRead)
+		{
+			GameState.I.FallRead = true;
+			_letterOpen = true;
+			Sfx.Play(this, Sfx.Lose, -6f);
+			QueueRedraw();
+			return;
+		}
 
 		// —— 皇命时效:限期已过而虏未破 → 行营催令(每过一日再催,信任累扣)——
 		{
 			var gsD = GameState.I;
-			if (gsD.MissionDeadline > 0 && gsD.CampaignHours > gsD.MissionDeadline && !gsD.EnemyDefeated)
+			if (!gsD.Fallen && gsD.MissionDeadline > 0 && gsD.CampaignHours > gsD.MissionDeadline && !gsD.EnemyDefeated)
 			{
 				gsD.MissionDeadline += 24f;
 				gsD.Trust = Math.Max(0, gsD.Trust - 5);
@@ -210,6 +247,18 @@ public partial class OverworldRoot : Node2D
 			}
 		}
 
+		// —— 瘴土蚀心:立于混沌之地,心神日削 ——
+		if (At(_pos) == 9)
+		{
+			GameState.I.San = Math.Max(0, GameState.I.San - dt * 1.6f);
+			if (!_chaosWhispered)
+			{
+				_chaosWhispered = true;
+				_banner = "风里有低语,像从地底下来——士卒攥紧了刀,没人敢接话。(混沌之路暂未铺完)";
+				_bannerAge = 0;
+			}
+		}
+
 		// —— 昼夜与后勤的提点 ——
 		{
 			var gs = GameState.I;
@@ -225,18 +274,42 @@ public partial class OverworldRoot : Node2D
 			if (gs.Grain >= 10f) _grainWarned10 = false;
 		}
 
-		// —— 事件:虏帐(破当面之虏后,兵抵虏帐=靖边)——
+		// —— 大军覆灭后的世界:残部可收拢 · 西官道通京畿 · 虏帐可降 · 东南瘴土(行为即选择)——
+		if (GameState.I.Fallen)
+		{
+			var gs = GameState.I;
+			// 溃卒残部:走近即收拢(组织反攻的本钱)
+			for (int i = 0; i < RemnantPos.Length; i++)
+			{
+				if (gs.RemnantsTaken[i] || _pos.DistanceTo(RemnantPos[i]) > 64f) continue;
+				gs.RemnantsTaken[i] = true;
+				int add = RemnantMen[i], left = add;
+				for (int u = 0; u < gs.OwnStrength.Length && left > 0; u++)
+				{
+					int deficit = CommandPost.Core.BattleScenario.OwnFullStrength[u] - gs.OwnStrength[u];
+					int take = Math.Min(deficit, left);
+					gs.OwnStrength[u] += take; left -= take;
+				}
+				_banner = $"收拢溃卒 {add - left} 员——残军之中,你的旗还立着。"; _bannerAge = 0;
+				Sfx.Play(this, Sfx.Drum, -8f);
+				gs.SaveRun();
+			}
+			// 西官道:回京听勘之路
+			if (_pos.X < 10 * TS && _pathHintCd <= 0)
+			{ _pathHintCd = 12; _banner = "西官道尽头是京畿——败军之将,回京复命,听凭朝廷发落。(此路暂未铺完)"; _bannerAge = 0; }
+		}
+
+		// —— 虏帐:大军未覆时守备森严;覆灭后,辕门大开——弃械而入,便是降人 ——
 		if (_pos.DistanceTo(FoeCamp) < 120f)
 		{
-			if (GameState.I.EnemyDefeated)
+			_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
+			if (_pathHintCd <= 0)
 			{
-				if (!_ending) Sfx.Play(this, Sfx.Horn, -5f);
-				_ending = true; _moveTarget = null;
-			}
-			else
-			{
-				_pos += (_pos - FoeCamp).Normalized() * 46f; _moveTarget = null;
-				_banner = "虏帐守备森严,游骑四出——先破当面之虏,再图斯地。"; _bannerAge = 0;
+				_pathHintCd = 12;
+				_banner = GameState.I.Fallen
+					? "虏营辕门大开,虏酋闻大酆军覆而设宴——弃械而入,便是降人。(此路暂未铺完)"
+					: "虏帐守备森严,游骑四出——先破当面之虏,再图斯地。";
+				_bannerAge = 0;
 			}
 		}
 
@@ -272,12 +345,6 @@ public partial class OverworldRoot : Node2D
 	{
 		if (e is InputEventKey { Pressed: true, Echo: false } k)
 		{
-			if (_ending)
-			{
-				if (k.Keycode is Key.Enter or Key.KpEnter)
-				{ SyncState(); GameState.I.SaveRun(); GameState.Go(this, "res://Title.tscn"); }
-				return;
-			}
 			if (_letterOpen)
 			{
 				if (k.Keycode is Key.E or Key.Escape or Key.Enter or Key.KpEnter)
@@ -319,6 +386,10 @@ public partial class OverworldRoot : Node2D
 				}
 				else { _banner = "白日正长,何必歇营?(黄昏后方可歇营过夜)"; _bannerAge = 0; }
 			}
+			else if (k.Keycode == Key.E && NearHq && GameState.I.Fallen)
+			{
+				_banner = "焦土断旗,无人应你。行营的一切,都留在那天夜里了。"; _bannerAge = 0;
+			}
 			else if (k.Keycode == Key.E && NearHq)
 			{
 				_letterOpen = true; Sfx.Play(this, Sfx.Click);
@@ -352,7 +423,7 @@ public partial class OverworldRoot : Node2D
 				gs.SaveRun();
 			}
 		}
-		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen && !_ending)
+		else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb && !_menu.Open && !_letterOpen)
 			_moveTarget = mb.Position - CamOffset();
 	}
 
@@ -376,9 +447,11 @@ public partial class OverworldRoot : Node2D
 				{
 					1 => new Color("2e4023"), 2 => new Color("2d4d5e"), 3 => new Color("3e6172"),
 					4 => new Color("6b5b3e"), 5 => new Color("55504a"), 6 => new Color("5a4632"),
-					7 => new Color("46404a"), 8 => new Color("6e5b41"), _ => new Color("4a5232")
+					7 => new Color("46404a"), 8 => new Color("6e5b41"), 9 => new Color("39283f"),
+					_ => new Color("4a5232")
 				};
 				if (((x + y) & 1) == 0) c = c.Darkened(0.05f);
+				if (_t[x, y] == 9 && ((x * 7 + y * 13) % 11) == 0) c = c.Lightened(0.07f);   // 瘴土磷光斑
 				DrawRect(new Rect2(x * TS, y * TS, TS, TS), c, true);
 			}
 
@@ -413,12 +486,40 @@ public partial class OverworldRoot : Node2D
 				var off = new Vector2(34f - i * 15f, ((i * 37) % 3 - 1) * 5f);
 				DrawCircle(ap + off, 4.6f, new Color(0.34f, 0.14f, 0.11f).Darkened(i % 3 * 0.06f));
 			}
-			DrawFlag(ap + new Vector2(12, -6), new Color("e6c25c"));
-			DrawFlag(ap + new Vector2(-44, -2), new Color("a8352a"));
-			DrawLabel(ap + new Vector2(0, -42), "行营 · 周崇", new Color("e6c25c"));
+			if (GameState.I.Fallen)
+			{
+				// 焚毁的行营:断旗与余烬
+				DrawLine(ap + new Vector2(12, -2), ap + new Vector2(24, -18), new Color("4a3a26"), 2f);
+				for (int i = 0; i < 3; i++)
+				{
+					float ph = ((float)_t0 * 0.22f + i * 0.37f) % 1f;
+					DrawCircle(ap + new Vector2(-20 + i * 22, -6 - ph * 46), 4f + ph * 9f,
+						new Color(0.25f, 0.24f, 0.23f, 0.30f * (1 - ph)));
+				}
+				DrawLabel(ap + new Vector2(0, -42), "行营(已破)", new Color(0.65f, 0.55f, 0.45f, 0.8f));
+			}
+			else
+			{
+				DrawFlag(ap + new Vector2(12, -6), new Color("e6c25c"));
+				DrawFlag(ap + new Vector2(-44, -2), new Color("a8352a"));
+				DrawLabel(ap + new Vector2(0, -42), "行营 · 周崇", new Color("e6c25c"));
+			}
 			if (NearHq)
-				DrawLabel(ap + new Vector2(0, 46), "E = 谒见行营", new Color("f2e6c8"));
+				DrawLabel(ap + new Vector2(0, 46), GameState.I.Fallen ? "焦土无人" : "E = 谒见行营", new Color("f2e6c8"));
 		}
+
+		// 溃卒残部(大军覆灭后)与混沌瘴土的路标
+		if (GameState.I.Fallen)
+			for (int i = 0; i < RemnantPos.Length; i++)
+			{
+				if (GameState.I.RemnantsTaken[i]) continue;
+				var rp = RemnantPos[i];
+				DrawCircle(rp, 5f, new Color(0.5f, 0.22f, 0.16f));
+				DrawCircle(rp + new Vector2(9, 4), 4f, new Color(0.44f, 0.2f, 0.15f));
+				DrawCircle(rp + new Vector2(-8, 5), 4f, new Color(0.4f, 0.18f, 0.14f));
+				DrawLabel(rp + new Vector2(0, -18), "溃卒残部", new Color("d8b890"));
+			}
+		DrawLabel(new Vector2(182 * TS, 112 * TS), "混沌瘴土", new Color(0.62f, 0.45f, 0.68f, 0.85f));
 
 		// 我方仪仗(一队人马 + 牙旗;将军立绘在中军帐/营区)
 		float fx = _faceLeft ? -1f : 1f;
@@ -453,11 +554,11 @@ public partial class OverworldRoot : Node2D
 		{
 			var gs = GameState.I;
 			float left = gs.MissionDeadline - gs.CampaignHours;
-			string line = gs.EnemyDefeated
-				? "虏已破——乘胜东进,兵抵虏帐即靖此边(C扎营 R歇营)"
+			string line = gs.Fallen
+				? "大军已覆,皇命成灰——此后的路,你自己选。(WASD行军 C扎营 R歇营)"
 				: $"皇命:侦破黑松岭当面之虏{(gs.MissionDeadline < 0 ? "" : left > 0 ? $"——限期余 {(int)left} 时辰" : "——限期已过!")} | WASD行军 C扎营 R歇营";
 			DrawString(_font, new Vector2(14, 44), line + " · Esc=菜单", HorizontalAlignment.Left, -1, 12,
-				left < 12f && !gs.EnemyDefeated && gs.MissionDeadline > 0 ? new Color("d9917a") : new Color("9aa0a8"));
+				!gs.Fallen && left < 12f && gs.MissionDeadline > 0 ? new Color("d9917a") : new Color("9aa0a8"));
 		}
 
 		// 后勤条:粮草与疲惫(行军的两本账)
@@ -482,7 +583,6 @@ public partial class OverworldRoot : Node2D
 			DrawString(_font, new Vector2(360, 90), _banner, HorizontalAlignment.Left, -1, 14, new Color("f2e6c8"));
 
 		DrawLetter();
-		DrawEnding();
 		_menu.Draw(this, _font);
 	}
 
@@ -499,7 +599,17 @@ public partial class OverworldRoot : Node2D
 
 		void L(string s, int size, string col) { DrawString(_font, new Vector2(x, y), s, HorizontalAlignment.Left, (int)w - 80, size, new Color(col)); y += size + 10; }
 
-		if (!GameState.I.EnemyDefeated)
+		if (GameState.I.Fallen)
+		{
+			L("败 报", 20, "d97a6a"); y += 6;
+			L("溃卒自西来,泣告:大军夜半为虏与叛部所乘,涧水尽赤。", 14, "d8d2c4");
+			L("周帅殁于乱军。行营焚,粮台陷,印信军符散于野。", 14, "c8c2b4");
+			L("朝廷之令,自此再无一字到你手上。", 14, "c8c2b4"); y += 8;
+			L("残旗之下,尚有你的人马。往西,是京城;往东,是虏帐;", 13, "e6c25c");
+			L("四野之间,有溃散的袍泽;东南……有连虏骑都绕开的瘴土。", 13, "e6c25c"); y += 8;
+			L("——无人再命令你。何去何从,用脚回答。", 12, "9aa0a8");
+		}
+		else if (!GameState.I.EnemyDefeated)
 		{
 			L("征虏皇命", 20, "e6c25c"); y += 6;
 			L("敕曰:虏骑犯我北鄙,现屯黑松岭以东,众寡未详。", 14, "c8c2b4");
@@ -519,27 +629,6 @@ public partial class OverworldRoot : Node2D
 		DrawString(_font, new Vector2(x, box.End.Y - 30), "E / 回车 · 领命", HorizontalAlignment.Left, -1, 13, new Color("e6c25c"));
 	}
 
-	/// <summary>章末:兵抵虏帐,第一章完。</summary>
-	private void DrawEnding()
-	{
-		if (!_ending) return;
-		DrawRect(new Rect2(0, 0, 1120, 760), new Color(0, 0, 0, 0.78f), true);
-		float w = 560, h = 360;
-		var box = new Rect2((1120 - w) / 2, (760 - h) / 2, w, h);
-		DrawRect(box, new Color(0.10f, 0.09f, 0.07f, 0.98f), true);
-		DrawRect(box, new Color("d9b34a"), false, 2f);
-		float y = box.Position.Y + 64;
-		DrawString(_font, new Vector2(0, y), "黑松岭靖边 —— 边野暂安", HorizontalAlignment.Center, 1120, 26, new Color("e6c25c")); y += 44;
-		DrawString(_font, new Vector2(0, y), "虏帐已空,残部远遁漠北。边野暂靖。", HorizontalAlignment.Center, 1120, 14, new Color("c8c2b4")); y += 30;
-		DrawString(_font, new Vector2(0, y), $"用时 {CalendarCn} · 主帅信任 {GameState.I.Trust}", HorizontalAlignment.Center, 1120, 14, new Color("d8d2c4")); y += 26;
-		if (GameState.I.LastVerdict is { } v)
-			DrawString(_font, new Vector2(0, y), $"行营终评:「{v.VerdictCn}」", HorizontalAlignment.Center, 1120, 14, new Color("f2e6c8"));
-		y += 34;
-		DrawString(_font, new Vector2(0, y), $"此章,尔部埋骨边野者 {GameState.I.Bones} 人。", HorizontalAlignment.Center, 1120, 14, new Color("c8a8a0")); y += 26;
-		DrawString(_font, new Vector2(0, y), "一将功成万骨枯。", HorizontalAlignment.Center, 1120, 13, new Color("8a8474")); y += 36;
-		DrawString(_font, new Vector2(0, y), "回车 · 回主菜单", HorizontalAlignment.Center, 1120, 14, new Color("e6c25c"));
-	}
-
 	private void DrawMinimap()
 	{
 		const float MS = 0.055f;                                          // 3200×2080 → 176×114
@@ -552,13 +641,18 @@ public partial class OverworldRoot : Node2D
 				{
 					1 => new Color("2e4023"), 2 or 3 => new Color("2d4d5e"), 4 => new Color("6b5b3e"),
 					5 => new Color("55504a"), 6 => new Color("d9b34a"), 7 => new Color("8ab"),
-					8 => new Color("6e5b41"), _ => new Color("3c412a")
+					8 => new Color("6e5b41"), 9 => new Color("4a3555"), _ => new Color("3c412a")
 				};
 				DrawRect(new Rect2(org.X + x * TS * MS, org.Y + y * TS * MS, TS * MS * 3, TS * MS * 3), c, true);
 			}
 		DrawCircle(org + _pos * MS, 3f, new Color("ffd9a0"));
-		DrawRect(new Rect2(org + GameState.I.ArmyPos * MS - new Vector2(2.5f, 2.5f), new Vector2(5, 5)), new Color("d9b34a"), true);
+		DrawRect(new Rect2(org + GameState.I.ArmyPos * MS - new Vector2(2.5f, 2.5f), new Vector2(5, 5)),
+			GameState.I.Fallen ? new Color(0.4f, 0.36f, 0.3f) : new Color("d9b34a"), true);
 		if (!GameState.I.EnemyDefeated) DrawCircle(org + _enemy * MS, 3f, new Color(0.1f, 0.1f, 0.12f));
+		if (GameState.I.Fallen)
+			for (int i = 0; i < RemnantPos.Length; i++)
+				if (!GameState.I.RemnantsTaken[i])
+					DrawCircle(org + RemnantPos[i] * MS, 2.5f, new Color("d8b890"));
 	}
 
 	private void DrawFlag(Vector2 p, Color c)

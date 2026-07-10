@@ -36,6 +36,16 @@ public partial class GameState : Node
 	/// <summary>开局皇命是否已宣读(首次上大地图自动展卷)。</summary>
 	public bool OrderRead;
 
+	// —— 序章:必败的远征(引子即教学,教学即玩本身)——
+	/// <summary>已打过的战斗数(序章:第一仗打完,无论胜负,大军覆灭)。</summary>
+	public int BattlesFought;
+	/// <summary>大军已覆:皇命成灰,世界开放——回京/收拢残部/降虏/入混沌,行为即选择。</summary>
+	public bool Fallen;
+	/// <summary>败报是否已宣读(覆灭卷轴只展一次)。</summary>
+	public bool FallRead;
+	/// <summary>野外三股溃卒残部是否已被收拢。</summary>
+	public bool[] RemnantsTaken = new bool[3];
+
 	/// <summary>本部六队现员(伤亡跨战延续;行营谒见可补员)。索引对应 BattleScenario.OwnUnitNames。</summary>
 	public int[] OwnStrength = (int[])BattleScenario.OwnFullStrength.Clone();
 	public int OwnTotal { get { int s = 0; foreach (var v in OwnStrength) s += v; return s; } }
@@ -99,6 +109,7 @@ public partial class GameState : Node
 		}
 		if (Battle != null)
 		{
+			BattlesFought++;
 			foreach (var u in Battle.Units)
 				if (u.Side == CommandPost.Core.Side.Friend && !u.Allied)
 				{
@@ -150,6 +161,7 @@ public partial class GameState : Node
 		MissionDeadline = 8f + 72f;                          // 皇命限三日(行军历自辰时起)
 		OrderRead = false;
 		OwnStrength = (int[])BattleScenario.OwnFullStrength.Clone();
+		BattlesFought = 0; Fallen = false; FallRead = false; RemnantsTaken = new bool[3];
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
@@ -170,6 +182,8 @@ public partial class GameState : Node
 			["bones"] = Bones, ["san"] = San,
 			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["deadline"] = MissionDeadline, ["orderread"] = OrderRead,
 			["strength"] = string.Join(",", OwnStrength),
+			["fought"] = BattlesFought, ["fallen"] = Fallen, ["fallread"] = FallRead,
+			["remnants"] = $"{(RemnantsTaken[0] ? 1 : 0)},{(RemnantsTaken[1] ? 1 : 0)},{(RemnantsTaken[2] ? 1 : 0)}",
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -207,6 +221,15 @@ public partial class GameState : Node
 			for (int i = 0; i < parts.Length && i < OwnStrength.Length; i++)
 				if (int.TryParse(parts[i], out int sv))
 					OwnStrength[i] = System.Math.Clamp(sv, 0, BattleScenario.OwnFullStrength[i]);
+		}
+		BattlesFought = d.ContainsKey("fought") ? d["fought"].AsInt32() : 0;
+		Fallen = d.ContainsKey("fallen") && d["fallen"].AsBool();
+		FallRead = d.ContainsKey("fallread") && d["fallread"].AsBool();
+		RemnantsTaken = new bool[3];
+		if (d.ContainsKey("remnants"))
+		{
+			var rp = d["remnants"].AsString().Split(',');
+			for (int i = 0; i < rp.Length && i < 3; i++) RemnantsTaken[i] = rp[i] == "1";
 		}
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
