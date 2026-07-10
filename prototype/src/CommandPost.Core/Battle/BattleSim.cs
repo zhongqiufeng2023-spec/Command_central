@@ -230,6 +230,10 @@ public sealed partial class BattleSim
         Replay.Frames.Add(f);
     }
 
+    /// <summary>友邻崩溃是否判硬性败:剧本战(左翼是防线一环)=真;
+    /// 野战里顺路来援的官军=假——那是你自己选的仗,友军垮了仗还在打。</summary>
+    public bool AlliedCollapseIsDefeat = true;
+
     /// <summary>左翼(友邻一路)是否已崩:折损逾六成五,或全员失序——一支残队独存不算「左翼尚在」。</summary>
     public bool LeftWingCollapsed
     {
@@ -278,7 +282,7 @@ public sealed partial class BattleSim
         if (!Units.Any(u => u.Side == Side.Friend) || !Units.Any(u => u.Side == Side.Enemy)) return;   // 没有两军就没有胜负
 
         // 硬性败之一:左翼(友邻一路)崩溃——指挥中枢侧翼洞开,全线不可守(关卡文档 §6)
-        if (LeftWingCollapsed)
+        if (AlliedCollapseIsDefeat && LeftWingCollapsed)
         {
             Over = true; Winner = Side.Enemy;
             Alerts.Add(new Alert((int)Time, "左翼崩溃!虏骑自北而下,全线动摇——败局已定。", true));

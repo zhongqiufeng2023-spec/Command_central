@@ -22,8 +22,8 @@ public readonly struct Vec2F
     public override string ToString() => $"({X:0},{Y:0})";
 }
 
-/// <summary>战场地貌。草原/官道/黑松林/丘陵/河/渡滩。</summary>
-public enum BTerrain { Grass, Road, Forest, Hill, River, Ford }
+/// <summary>战场地貌。草原/官道/黑松林/丘陵/河/渡滩/泽地。</summary>
+public enum BTerrain { Grass, Road, Forest, Hill, River, Ford, Marsh }
 
 /// <summary>
 /// 战场地形图:方格瓦片(16m)承载地貌,移动/视认在连续坐标上取所在瓦片修正。
@@ -56,7 +56,8 @@ public sealed class BattleMap
                 m._t[x, y] = lines[y][x] switch
                 {
                     'D' => BTerrain.Road, 'F' => BTerrain.Forest, 'H' => BTerrain.Hill,
-                    'R' => BTerrain.River, 'f' => BTerrain.Ford, _ => BTerrain.Grass
+                    'R' => BTerrain.River, 'f' => BTerrain.Ford, 'M' => BTerrain.Marsh,
+                    _ => BTerrain.Grass
                 };
         return m;
     }
@@ -73,11 +74,11 @@ public sealed class BattleMap
     public BTerrain At(Vec2F p) => AtTile((int)(p.X / TileSize), (int)(p.Y / TileSize));
 
     public static bool Passable(BTerrain t) => t != BTerrain.River;
-    /// <summary>移动速度倍率:路快、林慢、滩涉水最慢、河不可过。</summary>
+    /// <summary>移动速度倍率:路快、林慢、滩涉水最慢、泽地泥泞、河不可过。</summary>
     public static float SpeedMult(BTerrain t) => t switch
     {
         BTerrain.Road => 1.25f, BTerrain.Forest => 0.6f, BTerrain.Hill => 0.75f,
-        BTerrain.Ford => 0.45f, BTerrain.River => 0f, _ => 1f
+        BTerrain.Ford => 0.45f, BTerrain.River => 0f, BTerrain.Marsh => 0.5f, _ => 1f
     };
     /// <summary>视认倍率(按目标所在地形):林中难见。</summary>
     public static float ConcealMult(BTerrain t) => t == BTerrain.Forest ? 0.45f : 1f;

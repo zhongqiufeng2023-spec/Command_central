@@ -3,7 +3,7 @@ using System;
 namespace CommandPost.Core;
 
 /// <summary>战斗B档关卡工厂。</summary>
-public static class BattleScenario
+public static partial class BattleScenario
 {
     /// <summary>原内容整体下移的行数(北面扩出的左翼战地)。</summary>
     private const int NorthRows = 16;

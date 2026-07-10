@@ -166,6 +166,32 @@ public static class BattleMissions
                 Activates = new[] { "E", "F" }, SeedAllyPos = true },
         }
     };
+
+    /// <summary>
+    /// 野地遭遇战(通用):无分阶段中军令——仗是自己撞上的,目标开战即全数在身。
+    /// 窗口 25 分钟,到时虏骑自遁;军书上闻仍可发(行营远在西边,回执要等)。
+    /// </summary>
+    public static BattleMission Encounter(BattleGround ground, int foeUnits, bool hasAlly) => new()
+    {
+        Title = $"遭遇 · {WorldGen.GroundCn(ground)}",
+        HqPersonality = Personality.Steady,
+        EndTime = 1500f,
+        Objectives =
+        {
+            new BObjective { Id = "A", Cn = "侦明当面之敌", Kind = BObjectiveKind.ScoutEnemy,
+                RequiredCount = Math.Min(3, foeUnits) },
+            new BObjective { Id = "B", Cn = "军书具报行营(按 B 发书)", Kind = BObjectiveKind.ReportToHq },
+            new BObjective { Id = "C", Cn = "破当面之虏", Kind = BObjectiveKind.DefeatEnemy, Primary = true },
+            new BObjective { Id = "D", Cn = "保全士马(折损不逾三成)", Kind = BObjectiveKind.PreserveArmy },
+        },
+        Orders =
+        {
+            new BHqOrder { DispatchT = 0, LinkDelay = 5, TitleCn = "遇敌",
+                TextCn = hasAlly
+                    ? "前哨:虏骑当面,官军一部已接战于场中——救是不救,尔自斟酌;虏情务侦,相机破之。"
+                    : "前哨:虏骑当面而来!虏情务侦,相机破之——地利在先手。" },
+        }
+    };
 }
 
 /// <summary>
