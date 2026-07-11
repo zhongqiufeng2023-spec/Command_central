@@ -11,8 +11,10 @@ public sealed class AutoBattle
 {
     /// <summary>折损至开战兵力的这个比例即溃(与逐兵战 Rout 手感对齐)。</summary>
     public const float BreakFrac = 0.32f;
-    /// <summary>基准杀伤系数(每时辰,乘对方 √兵力)。</summary>
-    public const float KillRate = 6.0f;
+    /// <summary>基准杀伤系数(每时辰,乘对方 √兵力)。
+    /// 调过速:等额三百人野战约十余时辰见分晓,千五百人的大仗要打上一昼夜——
+    /// 战略层看得见「酣战正炽」,赶去还来得及撞进战团。</summary>
+    public const float KillRate = 1.6f;
 
     public int StartA { get; private set; }
     public int StartB { get; private set; }

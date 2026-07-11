@@ -28,6 +28,43 @@ public partial class GameState : Node
 	public bool EnemyDefeated;
 	private int _battleSeed = 20260704;
 
+	// —— 边野的活物:游弋的 NPC 队伍与它们之间的野战(骑砍式:世界各过各的日子)——
+	/// <summary>大地图上的一支 NPC 队伍。State:0=游弋 1=接战中 2=遁走 3=散尽(空位可复用)。</summary>
+	public class WorldParty
+	{
+		public int Kind;                    // 0=虏骑劫掠队 1=官军巡骑
+		public Vector2 Pos;
+		public int Men;
+		public float Qual = 1f;             // 战力系数(AutoBattle 用)
+		public int State;
+		public Vector2 Target;              // 当前去处(游弋航点/遁走归处)
+		public bool Hostile => Kind == 0;
+		public string NameCn => Kind == 0 ? "虏骑劫掠队" : "官军巡骑";
+	}
+	public System.Collections.Generic.List<WorldParty> Parties = new();
+
+	/// <summary>一场正在打的 NPC 野战(限时,按规模耗时;A=官军方索引,B=虏骑方索引)。战中不存档进度。</summary>
+	public class WorldClash { public int A, B; public AutoBattle Sim = null!; }
+	public System.Collections.Generic.List<WorldClash> Clashes = new();
+
+	/// <summary>虏帐方位(劫掠队的老巢与归处)。</summary>
+	public static readonly Vector2 FoeHome = new(180 * 16, 62 * 16);
+
+	/// <summary>本战对手是哪支 NPC 队伍(Parties 索引;-1=当面之敌的剧设战)。</summary>
+	public int EngagedParty = -1;
+	/// <summary>入阵助战的官军巡骑(Parties 索引;-1=无)。</summary>
+	public int EngagedAllyParty = -1;
+
+	/// <summary>撒下边野的活物(新局/旧档无队伍时)。</summary>
+	public void SpawnParties()
+	{
+		Parties.Clear(); Clashes.Clear();
+		Parties.Add(new WorldParty { Kind = 0, Pos = new Vector2(176 * 16, 44 * 16), Men = 380, Qual = 0.9f });
+		Parties.Add(new WorldParty { Kind = 0, Pos = new Vector2(170 * 16, 86 * 16), Men = 300, Qual = 0.9f });
+		Parties.Add(new WorldParty { Kind = 1, Pos = new Vector2(40 * 16, 70 * 16), Men = 340, Qual = 1.0f });
+		Parties.Add(new WorldParty { Kind = 1, Pos = new Vector2(62 * 16, 56 * 16), Men = 260, Qual = 1.0f });
+	}
+
 	// —— 皇命与行营(无章节剧本:开局即自由,皇命给目标与约束)——
 	/// <summary>行营(周崇大军)驻地:谒见、领粮之处。</summary>
 	public Vector2 ArmyPos = new(24 * 16, 64 * 16);
@@ -72,10 +109,30 @@ public partial class GameState : Node
 	public void StartBattle()
 	{
 		Battle = BattleScenario.BlackPineField(_battleSeed++, deploy: true, ownCounts: OwnStrength);
-		Battle.Difficulty = BDifficultyProfile.Of(Difficulty);
+		EngagedParty = EngagedAllyParty = -1;
+		ApplyMarchState();
+	}
+
+	/// <summary>
+	/// 野地遭遇战:对一支 NPC 队伍开打——在哪儿接的战,就在哪儿的地上打(terrain=接战处地表)。
+	/// allyIdx>=0 = 官军巡骑正与它缠斗,你是提兵撞进战团的(官军入阵为友邻,不归你辖)。
+	/// </summary>
+	public void StartEncounter(int foeIdx, int allyIdx, byte terrain)
+	{
+		var foe = Parties[foeIdx];
+		int allyMen = allyIdx >= 0 ? Parties[allyIdx].Men : 0;
+		Battle = BattleScenario.Encounter(WorldGen.GroundOf(terrain), _battleSeed++,
+			ownCounts: OwnStrength, foeMen: foe.Men, allyMen: allyMen, deploy: true);
+		EngagedParty = foeIdx; EngagedAllyParty = allyIdx;
+		ApplyMarchState();
+	}
+
+	/// <summary>行军状态带进战场:疲惫折体力,断粮动军心,心神低则回报失真(大地图的抉择在这里收账)。</summary>
+	private void ApplyMarchState()
+	{
+		Battle!.Difficulty = BDifficultyProfile.Of(Difficulty);
 		CampOnly = false;
 
-		// —— 行军状态带进战场:疲惫折体力,断粮动军心(大地图的抉择在这里收账)——
 		float stam = Fatigue > 80f ? 55f : Fatigue > 55f ? 72f : 100f;
 		foreach (var u in Battle.Units)
 		{
@@ -92,10 +149,11 @@ public partial class GameState : Node
 		else if (San < 60f) Battle.Feed("心神耗蚀——今日回报的数目,未必可尽信。");
 	}
 
-	/// <summary>战毕班师:胜则虏骑绝迹于野;行营裁断结转主帅信任;阵亡入万骨账。</summary>
+	/// <summary>战毕班师:行营裁断结转主帅信任;阵亡入万骨账;对手是谁,账就记到谁头上。</summary>
 	public void EndBattleReturn()
 	{
-		if (Battle is { Over: true, Winner: CommandPost.Core.Side.Friend }) EnemyDefeated = true;
+		bool vsParty = EngagedParty >= 0 && EngagedParty < Parties.Count;
+		if (!vsParty && Battle is { Over: true, Winner: CommandPost.Core.Side.Friend }) EnemyDefeated = true;
 		if (Battle?.Mission?.Verdict is { } v)
 		{
 			LastVerdict = v;
@@ -119,11 +177,40 @@ public partial class GameState : Node
 			float swing = Battle.Winner == CommandPost.Core.Side.Friend ? 10f
 						: Battle.Winner == CommandPost.Core.Side.Enemy ? -15f : -5f;
 			San = System.Math.Clamp(San + swing - Battle.FriendLossFrac * 20f, 0f, 100f);
+
+			// —— 野地遭遇战:对手与助战官军的死伤,回写到大地图的那支队伍身上 ——
+			if (vsParty)
+			{
+				var foe = Parties[EngagedParty];
+				int foeSurv = 0, allySurv = 0;
+				foreach (var u in Battle.Units)
+				{
+					if (u.Side == CommandPost.Core.Side.Enemy) foeSurv += u.AliveCount + u.Fled / 2;
+					else if (u.Allied) allySurv += u.AliveCount + u.Fled / 2;
+				}
+				if (foeSurv < 60) { foe.State = 3; foe.Men = 0; }            // 散尽于野
+				else { foe.Men = foeSurv; foe.State = 2; foe.Target = FoeHome; }   // 残部遁走归巢
+				if (EngagedAllyParty >= 0 && EngagedAllyParty < Parties.Count)
+				{
+					var ally = Parties[EngagedAllyParty];
+					if (allySurv < 60) { ally.State = 3; ally.Men = 0; }
+					else { ally.Men = allySurv; ally.State = 0; ally.Target = ally.Pos; }
+				}
+			}
 		}
 
-		// 战罢脱离接触:开战时两军标是贴在一起的——虏未灭就得拉开,
-		// 否则一回大地图立刻又撞上=回车再战的死循环
-		if (!EnemyDefeated)
+		// 战罢脱离接触:不拉开就是回车再战的死循环
+		if (vsParty)
+		{
+			var foe = Parties[EngagedParty];
+			var away = PartyPos - foe.Pos;
+			var dir = away.Length() > 1f ? away.Normalized() : new Vector2(-1, 0);
+			PartyPos += dir * 260f;
+			PendingBanner = foe.State == 3
+				? "战罢——那股虏骑就此散尽,弃了生口辎重,亡入草莽。"
+				: "战罢——两军脱离接触:残虏遁走,尔部收兵移营。";
+		}
+		else if (!EnemyDefeated)
 		{
 			EnemyPos = new Vector2(150 * 16, 64 * 16);                   // 虏骑收兵归汛
 			var away = PartyPos - EnemyPos;
@@ -132,6 +219,7 @@ public partial class GameState : Node
 			PendingBanner = "战罢——两军脱离接触:虏骑退回汛地,尔部收兵移营。";
 		}
 
+		EngagedParty = EngagedAllyParty = -1;
 		Battle = null;
 		CampOnly = true;
 	}
@@ -159,6 +247,8 @@ public partial class GameState : Node
 		BattlesFought = 0;
 		EnemyDefeated = false; Trust = 50; LastVerdict = null; Bones = 0;
 		CampaignHours = 8f; Grain = 100f; Fatigue = 0f; San = 75f;
+		SpawnParties();
+		EngagedParty = EngagedAllyParty = -1;
 		_battleSeed = 20260705 + (int)(Time.GetTicksMsec() % 99991);
 	}
 
@@ -178,6 +268,10 @@ public partial class GameState : Node
 			["ax"] = ArmyPos.X, ["ay"] = ArmyPos.Y, ["deadline"] = MissionDeadline, ["orderread"] = OrderRead,
 			["strength"] = string.Join(",", OwnStrength),
 			["fought"] = BattlesFought,
+			// 边野队伍(接战中的按游弋存——野战进度不入档,读档后有缘再打)
+			["parties"] = string.Join(";", Parties.ConvertAll(p =>
+				$"{p.Kind},{(int)p.Pos.X},{(int)p.Pos.Y},{p.Men},{(p.State == 1 ? 0 : p.State)}," +
+				p.Qual.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))),
 			["vcn"] = LastVerdict?.VerdictCn ?? "", ["vtrust"] = LastVerdict?.Trust ?? -1
 		};
 		using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
@@ -217,6 +311,26 @@ public partial class GameState : Node
 					OwnStrength[i] = System.Math.Clamp(sv, 0, BattleScenario.OwnFullStrength[i]);
 		}
 		BattlesFought = d.ContainsKey("fought") ? d["fought"].AsInt32() : 0;
+		// 边野队伍(旧档无此键 → 重新撒活物)
+		Parties.Clear(); Clashes.Clear();
+		EngagedParty = EngagedAllyParty = -1;
+		if (d.ContainsKey("parties") && d["parties"].AsString() is { Length: > 0 } ps)
+		{
+			foreach (var entry in ps.Split(';'))
+			{
+				var fp = entry.Split(',');
+				if (fp.Length < 6) continue;
+				Parties.Add(new WorldParty
+				{
+					Kind = int.Parse(fp[0]),
+					Pos = new Vector2(float.Parse(fp[1]), float.Parse(fp[2])),
+					Men = int.Parse(fp[3]),
+					State = int.Parse(fp[4]),
+					Qual = float.Parse(fp[5], System.Globalization.CultureInfo.InvariantCulture)
+				});
+			}
+		}
+		if (Parties.Count == 0) SpawnParties();
 		int vt = d["vtrust"].AsInt32();
 		LastVerdict = vt >= 0 ? new Appraisal { Trust = vt, VerdictCn = d["vcn"].AsString() } : null;
 		return true;

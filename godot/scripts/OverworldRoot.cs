@@ -43,6 +43,11 @@ public partial class OverworldRoot : Node2D
 	private bool _grainWarned40, _grainWarned10;
 	private double _eventCd = 26;                                         // 行军人味小报冷却
 	private readonly Random _evRng = new();
+
+	// —— 边野世界推演(你走,世界才走——骑砍式)——
+	private CommandPost.Core.Rng _worldRng = new(20260711);
+	private float _respawnRaider = 36f, _respawnPatrol = 48f;             // 补队冷却(行军时辰)
+	private bool _warnedRaider;
 	/// <summary>在大军(中军纵队)近旁——可谒见、领粮。</summary>
 	private bool NearHq => _pos.DistanceTo(GameState.I.ArmyPos) < 120f;
 
@@ -83,6 +88,7 @@ public partial class OverworldRoot : Node2D
 		_pos = GameState.I.PartyPos;
 		_enemy = GameState.I.EnemyPos;
 		_engageGrace = 4.0;                             // 上图缓几秒再判接敌(战罢/读档都别秒开战)
+		_worldRng = new CommandPost.Core.Rng((int)(Time.GetTicksMsec() % 1000003) + 7);
 
 		if (GameState.I.PendingBanner != "")
 		{ _banner = GameState.I.PendingBanner; _bannerAge = 0; GameState.I.PendingBanner = ""; }
@@ -188,11 +194,13 @@ public partial class OverworldRoot : Node2D
 		}
 
 		_moving = dir != Vector2.Zero;
+		float worldHours = 0f;                                            // 本帧世界该走多少表(你走,世界才走)
 		if (_moving)
 		{
 			float hours = dt * 1.2f;                                      // 行军走表(夜行更慢,见下)
 			var gs = GameState.I;
 			gs.CampaignHours += hours;
+			worldHours = hours;
 			bool night = NightFactor > 0.6f;
 			gs.Grain = Math.Max(0, gs.Grain - hours * 1.1f);              // 人吃马嚼
 			gs.Fatigue = Math.Min(100, gs.Fatigue + hours * (night ? 7f : 2.2f));   // 夜行倍疲
@@ -219,6 +227,17 @@ public partial class OverworldRoot : Node2D
 				_banner = MarchFlavor[_evRng.Next(MarchFlavor.Length)]; _bannerAge = 0;
 			}
 		}
+		else if (Input.IsKeyPressed(Key.Space))
+		{
+			// 空格观望:按兵不动,看世界走(想看官军和虏骑那场野战打完?站着等)
+			float hours = dt * 1.8f;
+			var gs = GameState.I;
+			gs.CampaignHours += hours;
+			worldHours = hours;
+			gs.Grain = Math.Max(0, gs.Grain - hours * 1.1f);              // 原地也是人吃马嚼
+			gs.Fatigue = Math.Max(0, gs.Fatigue - hours * 1.5f);          // 歇脚缓乏
+		}
+		if (worldHours > 0f) AdvanceWorld(worldHours);
 
 		// —— 瘴土蚀心:立于混沌之地,心神日削(这是地理,不是剧情)——
 		if (At(_pos) == 9)
@@ -282,6 +301,44 @@ public partial class OverworldRoot : Node2D
 			}
 		}
 
+		// —— 边野活物与你:劫掠队可避可撞;正打着的战团,你也可以一头撞进去 ——
+		if (_engageGrace <= 0)
+		{
+			var gsW = GameState.I;
+			bool anyNear = false;
+			for (int i = 0; i < gsW.Parties.Count; i++)
+			{
+				var p = gsW.Parties[i];
+				if (p.State == 3 || !p.Hostile) continue;
+				float d = _pos.DistanceTo(p.Pos);
+				if (d < 430f)
+				{
+					anyNear = true;
+					if (!_warnedRaider)
+					{
+						_warnedRaider = true;
+						_banner = "塘骑驰报:虏骑一股游弋于近处,烟尘不小——避让还是接战,尔自斟酌。";
+						_bannerAge = 0; Sfx.Play(this, Sfx.Alert, -10f);
+					}
+				}
+				if (d < 30f)
+				{
+					// 它若正与官军酣战——你是提兵撞进战团的,官军入阵为友邻
+					int ally = -1;
+					foreach (var c in gsW.Clashes) if (c.B == i) { ally = c.A; break; }
+					gsW.Clashes.RemoveAll(c => c.A == i || c.B == i);
+					if (ally >= 0) gsW.Parties[ally].State = 0;
+					p.State = 0;
+					SyncState();
+					gsW.StartEncounter(i, ally, At((_pos + p.Pos) / 2f));
+					Sfx.Play(this, Sfx.Drum, -4f);
+					GameState.Go(this, "res://Tent.tscn");
+					return;
+				}
+			}
+			if (!anyNear) _warnedRaider = false;
+		}
+
 		QueueRedraw();
 	}
 
@@ -324,6 +381,7 @@ public partial class OverworldRoot : Node2D
 					gs.Grain = Math.Max(0, gs.Grain - until * 0.4f);
 					gs.Fatigue = Math.Max(0, gs.Fatigue - 48f);
 					gs.San = Math.Min(100, gs.San + 5f);                  // 一夜安枕,心神稍复
+					AdvanceWorld(until);                                  // 你睡下了,边野的日子照过
 					_banner = "安营下寨,人马饱歇——明晨卯时拔营。"; _bannerAge = 0;
 					Sfx.Play(this, Sfx.Click);
 					SyncState(); gs.SaveRun();
@@ -368,6 +426,153 @@ public partial class OverworldRoot : Node2D
 	}
 
 	private void SyncState() { GameState.I.PartyPos = _pos; GameState.I.EnemyPos = _enemy; }
+
+	// ====================================================================
+	//  边野世界推演:你走,世界才走(骑砍式)——
+	//  队伍游弋、官军×虏骑相遇接战、野战按规模限时分晓、散尽的过阵子再开出来。
+	// ====================================================================
+
+	private void AdvanceWorld(float hours)
+	{
+		while (hours > 0f)
+		{
+			float dt = Mathf.Min(0.5f, hours);                            // 小步推,免得一大步跨山越河
+			hours -= dt;
+			StepWorld(dt);
+		}
+	}
+
+	private void StepWorld(float dt)
+	{
+		var gs = GameState.I;
+
+		// —— 游弋与遁走 ——
+		foreach (var p in gs.Parties)
+		{
+			if (p.State is 1 or 3) continue;
+			if (p.State == 2)
+			{
+				var home = p.Kind == 0 ? GameState.FoeHome : gs.ArmyPos;
+				var dHome = home - p.Pos;
+				if (dHome.Length() < 60f) { p.Men += p.Men / 5; p.State = 0; p.Target = Vector2.Zero; }  // 归巢整补再出
+				else p.Pos += dHome.Normalized() * 150f * dt;                                            // 溃逃快马
+				continue;
+			}
+			// 劫掠队见你近了:咬得动就咬,惹不起绕道(它掂量的是你的兵形——五十抽一,看得见)
+			if (p.Hostile)
+			{
+				float dp = p.Pos.DistanceTo(_pos);
+				if (dp < 280f)
+					p.Target = gs.OwnTotal < p.Men * 1.5f ? _pos
+							 : p.Pos + (p.Pos - _pos).Normalized() * 340f;
+			}
+			if (p.Target == Vector2.Zero || p.Pos.DistanceTo(p.Target) < 24f)
+				p.Target = PickWaypoint(p);
+			var dir = p.Target - p.Pos;
+			if (dir.Length() < 1f) continue;
+			var next = p.Pos + dir.Normalized() * 95f * SpeedMult(At(p.Pos)) * dt;
+			next.X = Math.Clamp(next.X, 10, TW * TS - 10); next.Y = Math.Clamp(next.Y, 10, TH * TS - 10);
+			if (Passable(At(next))) p.Pos = next;
+			else p.Target = PickWaypoint(p);                              // 撞山换道
+		}
+
+		// —— 官军×虏骑:相遇即接战(锁住双方,开一场限时野战)——
+		for (int i = 0; i < gs.Parties.Count; i++)
+			for (int j = 0; j < gs.Parties.Count; j++)
+			{
+				var a = gs.Parties[i]; var b = gs.Parties[j];
+				if (a.Kind != 1 || b.Kind != 0) continue;                 // A=官军 B=虏骑
+				if (a.State != 0 || b.State != 0) continue;
+				if (a.Pos.DistanceTo(b.Pos) > 30f) continue;
+				var ground = CommandPost.Core.WorldGen.GroundOf(At((a.Pos + b.Pos) / 2f));
+				gs.Clashes.Add(new GameState.WorldClash
+				{ A = i, B = j, Sim = CommandPost.Core.AutoBattle.Start(a.Men, a.Qual, b.Men, b.Qual, ground) });
+				a.State = 1; b.State = 1;
+				_banner = $"望楼旗语:官军巡骑与虏骑接战于{CommandPost.Core.WorldGen.GroundCn(ground)}——烟尘蔽日!";
+				_bannerAge = 0; Sfx.Play(this, Sfx.Alert, -10f);
+			}
+
+		// —— 酣战推进(限时:规模越大打得越久;兵力边打边掉——你赶到时它是什么就是什么)——
+		for (int k = gs.Clashes.Count - 1; k >= 0; k--)
+		{
+			var c = gs.Clashes[k];
+			var a = gs.Parties[c.A]; var b = gs.Parties[c.B];
+			c.Sim.Step(dt, _worldRng);
+			a.Men = c.Sim.MenA; b.Men = c.Sim.MenB;
+			if (!c.Sim.Over) continue;
+			gs.Clashes.RemoveAt(k);
+			if (c.Sim.Winner is not { } w)
+			{
+				a.State = 2; b.State = 2;
+				_banner = "野战两败俱伤,双方各自曳兵而走。"; _bannerAge = 0;
+				continue;
+			}
+			var win = w == CommandPost.Core.Side.Friend ? a : b;
+			var lose = w == CommandPost.Core.Side.Friend ? b : a;
+			win.State = 0; win.Target = Vector2.Zero;
+			lose.State = lose.Men < 60 ? 3 : 2;
+			_banner = $"野战分晓(打了{(int)(c.Sim.Hours + 0.99f)}个时辰):{win.NameCn}击溃{lose.NameCn}" +
+					  (lose.State == 3 ? "——败者就此散尽。" : "——残部曳兵遁走。");
+			_bannerAge = 0;
+		}
+
+		// —— 边野不空场:散尽的过阵子有新队伍开出来(虏自虏帐,官军自行营)——
+		_respawnRaider -= dt;
+		if (_respawnRaider <= 0f)
+		{
+			_respawnRaider = 30f + _evRng.Next(26);
+			Revive(0, GameState.FoeHome, 240 + _evRng.Next(180), 0.9f);
+		}
+		_respawnPatrol -= dt;
+		if (_respawnPatrol <= 0f)
+		{
+			_respawnPatrol = 42f + _evRng.Next(20);
+			Revive(1, gs.ArmyPos, 220 + _evRng.Next(140), 1.0f);
+		}
+	}
+
+	/// <summary>游弋航点:劫掠队扑官道沿线与边镇的富庶处;官军沿官道与渡口巡边。</summary>
+	private Vector2 PickWaypoint(GameState.WorldParty p)
+	{
+		if (p.Kind == 0)
+		{
+			var picks = new[]
+			{
+				new Vector2(31 * TS, 104 * TS),                                            // 边镇(有的抢)
+				new Vector2((90 + _evRng.Next(70)) * TS, (58 + _evRng.Next(14)) * TS),     // 官道沿线
+				new Vector2(95 * TS, 97 * TS),                                             // 南渡滩
+				new Vector2((150 + _evRng.Next(30)) * TS, (36 + _evRng.Next(56)) * TS),    // 岭东野地
+			};
+			return picks[_evRng.Next(picks.Length)];
+		}
+		var pk = new[]
+		{
+			new Vector2(30 * TS, 64 * TS), new Vector2(60 * TS, 66 * TS),
+			new Vector2(88 * TS, 64 * TS), new Vector2(52 * TS, 80 * TS),
+		};
+		return pk[_evRng.Next(pk.Length)] + new Vector2(_evRng.Next(-40, 41), _evRng.Next(-40, 41));
+	}
+
+	/// <summary>补一支队伍上图:优先复用散尽的空位;同类活队足两支则不补。</summary>
+	private void Revive(int kind, Vector2 at, int men, float qual)
+	{
+		var gs = GameState.I;
+		int alive = 0; GameState.WorldParty? slot = null;
+		foreach (var p in gs.Parties)
+		{
+			if (p.Kind != kind) continue;
+			if (p.State == 3) slot ??= p; else alive++;
+		}
+		if (alive >= 2) return;
+		if (slot == null)
+		{
+			if (gs.Parties.Count >= 10) return;
+			slot = new GameState.WorldParty { Kind = kind };
+			gs.Parties.Add(slot);
+		}
+		slot.Pos = at + new Vector2(_evRng.Next(-60, 61), _evRng.Next(-60, 61));
+		slot.Men = men; slot.Qual = qual; slot.State = 0; slot.Target = Vector2.Zero;
+	}
 
 	public override void _Draw()
 	{
@@ -428,6 +633,31 @@ public partial class OverworldRoot : Node2D
 				DrawLabel(ap + new Vector2(0, 48), "E = 谒见行营", new Color("f2e6c8"));
 		}
 
+		// —— 边野活物:虏骑劫掠队 / 官军巡骑(它们各过各的日子)——
+		foreach (var p in GameState.I.Parties)
+		{
+			if (p.State == 3) continue;
+			float pfx = p.Target != Vector2.Zero && p.Target.X < p.Pos.X ? -1f : 1f;
+			bool pmov = p.State != 1 && p.Target != Vector2.Zero && p.Pos.DistanceTo(p.Target) > 26f;
+			if (pmov) DrawDust(p.Pos, pfx);
+			DrawTroops(p.Pos, p.Men, p.Hostile ? new Color(0.09f, 0.09f, 0.12f) : new Color(0.30f, 0.13f, 0.10f), pfx, pmov);
+			DrawLabel(p.Pos + new Vector2(0, -28), $"{p.NameCn} · 约{Mathf.Max(1, (p.Men + 50) / 100)}百",
+				p.Hostile ? new Color("bcd2ec") : new Color("e8c9a0"));
+		}
+		// 酣战尘团:两军绞在一处——大仗要打上好几个时辰,赶得上就分得了赃(或救得了人)
+		foreach (var c in GameState.I.Clashes)
+		{
+			var mid = (GameState.I.Parties[c.A].Pos + GameState.I.Parties[c.B].Pos) / 2f;
+			for (int i = 0; i < 5; i++)
+			{
+				float ph = ((float)_t0 * 0.9f + i * 0.2f) % 1f;
+				float ang = i * 1.26f + (float)_t0 * 1.7f;
+				DrawCircle(mid + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * (6 + ph * 14), 4f + ph * 7f,
+					new Color(0.6f, 0.55f, 0.45f, 0.3f * (1 - ph)));
+			}
+			DrawLabel(mid + new Vector2(0, -46), $"酣战 · 已{(int)(c.Sim.Hours + 0.99f)}时辰", new Color("d9917a"));
+		}
+
 		DrawLabel(new Vector2(182 * TS, 112 * TS), "混沌瘴土", new Color(0.62f, 0.45f, 0.68f, 0.85f));
 
 		// 我方行军纵队(兵形五十抽一 + 牙旗;将军立绘只在中军帐/营区)
@@ -455,10 +685,10 @@ public partial class OverworldRoot : Node2D
 			var gs = GameState.I;
 			float left = gs.MissionDeadline - gs.CampaignHours;
 			string line = gs.EnemyDefeated
-				? "虏已破,边野暂靖——尔部自便。(WASD行军 C扎营 R歇营 · 行营可领粮补员)"
+				? "虏已破,边野暂靖——尔部自便。(WASD行军 空格观望 C扎营 R歇营 · 行营可领粮补员)"
 				: gs.BattlesFought > 0
-					? "皇命未竟,虏犹在岭东——何时再战,尔自斟酌。(WASD行军 C扎营 R歇营)"
-					: $"皇命:侦破黑松岭当面之虏{(gs.MissionDeadline < 0 ? "" : left > 0 ? $"——限期余 {(int)left} 时辰" : "——限期已过!")} | WASD行军 C扎营 R歇营";
+					? "皇命未竟,虏犹在岭东——何时再战,尔自斟酌。(WASD行军 空格观望 C扎营 R歇营)"
+					: $"皇命:侦破黑松岭当面之虏{(gs.MissionDeadline < 0 ? "" : left > 0 ? $"——限期余 {(int)left} 时辰" : "——限期已过!")} | WASD行军 空格观望 C扎营 R歇营";
 			DrawString(_font, new Vector2(14, 44), line + " · Esc=菜单", HorizontalAlignment.Left, -1, 12,
 				!gs.EnemyDefeated && gs.BattlesFought == 0 && left < 12f && gs.MissionDeadline > 0 ? new Color("d9917a") : new Color("9aa0a8"));
 		}
@@ -542,9 +772,18 @@ public partial class OverworldRoot : Node2D
 				c = rel >= 0 ? c.Lightened(rel) : c.Darkened(-rel);
 				DrawRect(new Rect2(org.X + x * TS * MS, org.Y + y * TS * MS, TS * MS * 3, TS * MS * 3), c, true);
 			}
-		DrawGeneralMark(org + _pos * MS);                                 // 小图上的你=将军本人(大图上是队伍)
 		DrawRect(new Rect2(org + GameState.I.ArmyPos * MS - new Vector2(2.5f, 2.5f), new Vector2(5, 5)), new Color("d9b34a"), true);
 		if (!GameState.I.EnemyDefeated) DrawCircle(org + _enemy * MS, 3f, new Color(0.1f, 0.1f, 0.12f));
+		foreach (var p in GameState.I.Parties)
+			if (p.State != 3)
+				DrawCircle(org + p.Pos * MS, 2.2f, p.Hostile ? new Color(0.12f, 0.12f, 0.16f) : new Color(0.55f, 0.24f, 0.18f));
+		foreach (var c in GameState.I.Clashes)
+		{
+			var mid = (GameState.I.Parties[c.A].Pos + GameState.I.Parties[c.B].Pos) / 2f;
+			float pulse = 1.5f + Mathf.Sin((float)_t0 * 6f) * 1.2f;
+			DrawCircle(org + mid * MS, 2f + pulse, new Color(0.85f, 0.4f, 0.3f, 0.55f));
+		}
+		DrawGeneralMark(org + _pos * MS);                                 // 小图上的你=将军本人(大图上是队伍)
 	}
 
 	/// <summary>当面之敌的号称兵力(黑松岭一路;望之知势,细数得靠塘骑)。</summary>
